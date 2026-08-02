@@ -1,3 +1,129 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f8fc"><title>工作 SOP</title><link rel="manifest" href="./manifest.json"><link rel="stylesheet" href="./css/style.css"></head><body>
-<div id="loginView" class="login-view"><div class="login-card"><div class="brand-mark">S</div><h1>工作 SOP</h1><p>請使用授權帳號登入後查看內部文件。</p><div id="googleLoginBtn"></div><p class="small-note">Outlook 信箱可先建立 Google 帳號後登入。</p><div id="loginMessage" class="message"></div></div></div>
-<div id="appView" class="app-shell hidden"><aside class="sidebar"><div class="brand-row"><div class="brand-mark small">S</div><div><strong>工作 SOP</strong><span>Knowledge Base</span></div></div><div class="search-wrap"><input id="searchInput" type="search" placeholder="搜尋 SOP 或內容…"></div><nav id="menuTree" class="menu-tree"></nav><div class="sidebar-footer"><div id="userEmail" class="user-email"></div><button id="logoutBtn" class="ghost-btn">登出</button></div></aside><main class="main-area"><header class="topbar"><button id="menuBtn" class="menu-btn">☰</button><div><div id="breadcrumb" class="breadcrumb">首頁</div><h1 id="pageTitle">工作 SOP</h1></div></header><section id="homeView" class="content-view"><div class="hero"><span class="eyebrow">內部知識庫</span><h2>快速找到正確流程，少走一點冤枉路。</h2><p>Test、Leader、驗證，以及測項資料庫，都集中在同一個入口。</p></div><div id="categoryCards" class="card-grid"></div><section class="panel"><h3>最近新增</h3><div id="recentList" class="item-list"></div></section></section><section id="detailView" class="content-view hidden"><div id="loadingState" class="loading hidden">載入中…</div><article id="docContent" class="doc-content hidden"></article><div id="sheetContent" class="sheet-content hidden"></div><div id="emptyContent" class="empty-state hidden"><h3>內容準備中</h3><p>這個項目目前尚未加入內容，之後更新後會顯示在這裡。</p></div></section><section id="searchView" class="content-view hidden"><section class="panel"><h3>搜尋結果</h3><div id="searchResults" class="item-list"></div></section></section></main></div><div id="mobileOverlay" class="mobile-overlay hidden"></div><script src="https://accounts.google.com/gsi/client" async defer></script><script type="module" src="./js/app.js"></script></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7fb">
+  <meta name="description" content="內部工作 SOP 知識庫">
+  <title>工作 SOP</title>
+
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/style.css?v=2.1">
+</head>
+<body>
+  <div id="loginView" class="login-view">
+    <div class="login-card">
+      <div class="brand-mark">S</div>
+      <h1>工作 SOP</h1>
+      <p>請使用授權帳號登入後查看內部文件。</p>
+
+      <div id="googleLoginBtn"></div>
+
+      <p class="small-note">登入後，瀏覽器會保留登入狀態。</p>
+      <div id="loginMessage" class="message"></div>
+    </div>
+  </div>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark small">S</div>
+        <div>
+          <strong>工作 SOP</strong>
+          <span>Knowledge Base</span>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="搜尋 SOP 或全部內容…"
+          autocomplete="off"
+        >
+      </div>
+
+      <nav id="menuTree" class="menu-tree"></nav>
+
+      <div class="sidebar-footer">
+        <div id="userEmail" class="user-email"></div>
+        <button id="logoutBtn" class="ghost-btn" type="button">登出</button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button id="menuBtn" class="menu-btn" type="button" aria-label="開啟選單">☰</button>
+
+        <div>
+          <div id="breadcrumb" class="breadcrumb">首頁</div>
+          <h1 id="pageTitle">工作 SOP</h1>
+        </div>
+      </header>
+
+      <section id="homeView" class="content-view">
+        <div class="hero">
+          <div>
+            <span class="eyebrow">內部知識庫</span>
+            <h2>快速找到正確流程，少走一點冤枉路。</h2>
+            <p>Test、Leader、驗證，以及測項資料庫，都集中在同一個入口。</p>
+          </div>
+        </div>
+
+        <div id="categoryCards" class="card-grid"></div>
+
+        <section class="panel">
+          <div class="panel-title-row">
+            <h3>最近新增</h3>
+          </div>
+
+          <div id="recentList" class="item-list"></div>
+        </section>
+      </section>
+
+      <section id="detailView" class="content-view hidden">
+        <!-- Test 的「有在測項／沒在測項」專用搜尋 -->
+        <div id="localTableSearchWrap" class="local-search-wrap hidden">
+          <div class="local-search-heading">
+            <strong id="localSearchTitle">搜尋目前測項</strong>
+            <span id="localSearchCount" class="local-search-count"></span>
+          </div>
+
+          <input
+            id="localTableSearch"
+            type="search"
+            placeholder="只搜尋目前這一張測項表格…"
+            autocomplete="off"
+          >
+        </div>
+
+        <div id="loadingState" class="loading hidden">
+          <div class="spinner"></div>
+          <p>載入中…</p>
+        </div>
+
+        <article id="docContent" class="doc-content hidden"></article>
+        <div id="sheetContent" class="sheet-content hidden"></div>
+
+        <div id="emptyContent" class="empty-state hidden">
+          <h3>內容準備中</h3>
+          <p>這個項目目前尚未加入內容，之後更新後會顯示在這裡。</p>
+        </div>
+      </section>
+
+      <section id="searchView" class="content-view hidden">
+        <section class="panel">
+          <h3>搜尋結果</h3>
+          <div id="searchStatus" class="search-status"></div>
+          <div id="searchResults" class="item-list"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div id="mobileOverlay" class="mobile-overlay hidden"></div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script type="module" src="./js/app.js?v=2.1"></script>
+</body>
+</html>

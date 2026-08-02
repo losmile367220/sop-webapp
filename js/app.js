@@ -5,17 +5,34 @@ import {
   logout
 } from "./auth.js";
 
-/**
- * 全域狀態
- */
+/* =========================================================
+   狀態與快取
+   ========================================================= */
+
 const state = {
   items: [],
-  categories: ["Test", "Leader", "驗證"]
+  categories: ["Test", "Leader", "驗證"],
+  currentItem: null,
+  searchRequestId: 0
 };
 
-/**
- * DOM 元素
+/*
+ * 記憶體快取：
+ * 同一頁面內第二次打開同一份 SOP／測項時，不再重新呼叫 Apps Script。
  */
+const memoryCache = new Map();
+
+/*
+ * sessionStorage 快取：
+ * 同一個瀏覽器分頁重新整理後，30 分鐘內仍可快速開啟。
+ */
+const CACHE_PREFIX = "sop_content_v2:";
+const CACHE_TTL = 30 * 60 * 1000;
+
+/* =========================================================
+   DOM
+   ========================================================= */
+
 const els = {
   loginView: document.getElementById("loginView"),
   appView: document.getElementById("appView"),
@@ -27,6 +44,7 @@ const els = {
 
   searchInput: document.getElementById("searchInput"),
   searchResults: document.getElementById("searchResults"),
+  searchStatus: document.getElementById("searchStatus"),
 
   homeView: document.getElementById("homeView"),
   detailView: document.getElementById("detailView"),
@@ -42,12 +60,18 @@ const els = {
   userEmail: document.getElementById("userEmail"),
 
   sidebar: document.querySelector(".sidebar"),
-  mobileOverlay: document.getElementById("mobileOverlay")
+  mobileOverlay: document.getElementById("mobileOverlay"),
+
+  localTableSearchWrap: document.getElementById("localTableSearchWrap"),
+  localTableSearch: document.getElementById("localTableSearch"),
+  localSearchTitle: document.getElementById("localSearchTitle"),
+  localSearchCount: document.getElementById("localSearchCount")
 };
 
-/**
- * 初始事件
- */
+/* =========================================================
+   基本事件
+   ========================================================= */
+
 document
   .getElementById("logoutBtn")
   .addEventListener("click", logout);
@@ -61,9 +85,6 @@ els.mobileOverlay.addEventListener(
   closeMobileMenu
 );
 
-/**
- * 手機側邊選單
- */
 function openMobileMenu() {
   els.sidebar.classList.add("open");
   els.mobileOverlay.classList.remove("hidden");
@@ -74,9 +95,6 @@ function closeMobileMenu() {
   els.mobileOverlay.classList.add("hidden");
 }
 
-/**
- * 切換主要畫面
- */
 function showOnly(view) {
   [
     els.homeView,
@@ -89,30 +107,47 @@ function showOnly(view) {
   view.classList.remove("hidden");
 }
 
-/**
- * 顯示分類與類型圖示
- */
+/* =========================================================
+   顯示輔助
+   ========================================================= */
+
 function iconFor(category, type) {
   if (type === "database") {
     return "📊";
   }
 
-  const categoryIcons = {
+  const icons = {
     Test: "🧪",
     Leader: "👨‍💼",
     驗證: "✅"
   };
 
-  return categoryIcons[category] || "📄";
+  return icons[category] || "📄";
 }
 
-/**
- * 登入後啟動應用程式
- */
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase("zh-TW")
+    .replace(/[\s\-‐-‒–—―_./\\]+/g, "");
+}
+
+/* =========================================================
+   啟動
+   ========================================================= */
+
 async function start(user) {
   els.loginView.classList.add("hidden");
   els.appView.classList.remove("hidden");
-
   els.userEmail.textContent = user.email || "";
 
   try {
@@ -123,22 +158,22 @@ async function start(user) {
       : [];
 
     updateCategoryList();
+    renderAll();
   } catch (error) {
     console.error("取得目錄失敗：", error);
 
     state.items = [];
+    renderAll();
 
-    showGlobalError(
-      error.message || "無法取得 SOP 資料"
-    );
+    els.recentList.innerHTML = `
+      <div class="empty-state">
+        <h3>資料讀取失敗</h3>
+        <p>${escapeHtml(error.message || "無法取得 SOP 資料")}</p>
+      </div>
+    `;
   }
-
-  renderAll();
 }
 
-/**
- * 根據實際資料補充分類
- */
 function updateCategoryList() {
   const categories = [
     "Test",
@@ -162,30 +197,16 @@ function updateCategoryList() {
   state.categories = categories;
 }
 
-/**
- * 顯示全域錯誤
- */
-function showGlobalError(message) {
-  els.recentList.innerHTML = `
-    <div class="empty-state">
-      <h3>資料讀取失敗</h3>
-      <p>${escapeSearchHtml(message)}</p>
-    </div>
-  `;
-}
-
-/**
- * 重新渲染首頁
- */
 function renderAll() {
   renderMenu();
   renderCategoryCards();
   renderRecent();
 }
 
-/**
- * 左側目錄
- */
+/* =========================================================
+   左側目錄
+   ========================================================= */
+
 function renderMenu() {
   els.menuTree.innerHTML = "";
 
@@ -201,30 +222,24 @@ function renderMenu() {
     const group = document.createElement("div");
     group.className = "menu-group";
 
-    const title =
-      document.createElement("button");
-
+    const title = document.createElement("button");
     title.className = "menu-group-title";
-
+    title.type = "button";
     title.innerHTML = `
       <span>
         ${iconFor(category)}
-        ${escapeSearchHtml(category)}
+        ${escapeHtml(category)}
       </span>
       <span>${items.length}</span>
     `;
 
-    const list =
-      document.createElement("div");
-
+    const list = document.createElement("div");
     list.className = "menu-items";
 
     items.forEach((item) => {
-      const button =
-        document.createElement("button");
-
+      const button = document.createElement("button");
       button.className = "menu-item";
-
+      button.type = "button";
       button.textContent =
         `${iconFor(category, item.type)} ${item.name}`;
 
@@ -242,9 +257,10 @@ function renderMenu() {
   });
 }
 
-/**
- * 首頁分類卡片
- */
+/* =========================================================
+   首頁
+   ========================================================= */
+
 function renderCategoryCards() {
   els.categoryCards.innerHTML = "";
 
@@ -257,23 +273,13 @@ function renderCategoryCards() {
       return;
     }
 
-    const card =
-      document.createElement("div");
-
+    const card = document.createElement("div");
     card.className = "category-card";
 
     card.innerHTML = `
-      <div class="icon">
-        ${iconFor(category)}
-      </div>
-
-      <h3>
-        ${escapeSearchHtml(category)}
-      </h3>
-
-      <p>
-        ${count} 個項目
-      </p>
+      <div class="icon">${iconFor(category)}</div>
+      <h3>${escapeHtml(category)}</h3>
+      <p>${count} 個項目</p>
     `;
 
     card.addEventListener(
@@ -285,12 +291,6 @@ function renderCategoryCards() {
   });
 }
 
-/**
- * 最近新增
- *
- * 目前沒有日期欄位，因此暫時依照
- * Google Sheet 中的資料順序，取最後六筆。
- */
 function renderRecent() {
   els.recentList.innerHTML = "";
 
@@ -312,29 +312,19 @@ function renderRecent() {
   });
 }
 
-/**
- * 建立一筆清單項目
- */
 function makeItemRow(item) {
-  const row =
-    document.createElement("div");
-
+  const row = document.createElement("div");
   row.className = "item-row";
 
   row.innerHTML = `
     <div>
       <strong>
         ${iconFor(item.category, item.type)}
-        ${escapeSearchHtml(item.name)}
+        ${escapeHtml(item.name)}
       </strong>
-
       <br>
-
-      <small>
-        ${escapeSearchHtml(item.category)}
-      </small>
+      <small>${escapeHtml(item.category)}</small>
     </div>
-
     <span>›</span>
   `;
 
@@ -346,15 +336,13 @@ function makeItemRow(item) {
   return row;
 }
 
-/**
- * 顯示指定大分類
- */
 function showCategory(category) {
   els.pageTitle.textContent = category;
   els.breadcrumb.textContent =
     `首頁 / ${category}`;
 
   els.searchResults.innerHTML = "";
+  els.searchStatus.textContent = "";
 
   const items = state.items.filter(
     (item) => item.category === category
@@ -374,25 +362,83 @@ function showCategory(category) {
   showOnly(els.searchView);
 }
 
-/**
- * 開啟 SOP 或 Database
- */
+/* =========================================================
+   內容快取
+   ========================================================= */
+
+function cacheKey(item) {
+  return `${CACHE_PREFIX}${item.type}|${item.url}`;
+}
+
+function getCached(item) {
+  const key = cacheKey(item);
+
+  if (memoryCache.has(key)) {
+    return memoryCache.get(key);
+  }
+
+  try {
+    const raw = sessionStorage.getItem(key);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (
+      !parsed ||
+      Date.now() - parsed.time > CACHE_TTL
+    ) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
+    memoryCache.set(key, parsed.html);
+
+    return parsed.html;
+  } catch {
+    return null;
+  }
+}
+
+function setCached(item, html) {
+  const key = cacheKey(item);
+
+  memoryCache.set(key, html);
+
+  try {
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        time: Date.now(),
+        html
+      })
+    );
+  } catch {
+    /*
+     * 文件含大量 Base64 圖片時，可能超過 sessionStorage 容量。
+     * 此時保留記憶體快取即可，不影響功能。
+     */
+  }
+}
+
+/* =========================================================
+   開啟 SOP／Database
+   ========================================================= */
+
 async function openItem(item) {
   closeMobileMenu();
 
-  els.pageTitle.textContent = item.name;
+  state.currentItem = item;
 
+  els.pageTitle.textContent = item.name;
   els.breadcrumb.textContent =
     `${item.category} / ${item.name}`;
 
   showOnly(els.detailView);
-
   resetDetailView();
 
-  /**
-   * 暫時內容或沒有網址時，
-   * 直接顯示準備中。
-   */
   if (item.isEmpty || !item.url) {
     showEmptyContent(
       "內容準備中",
@@ -402,30 +448,25 @@ async function openItem(item) {
     return;
   }
 
+  const cachedHtml = getCached(item);
+
+  if (cachedHtml !== null) {
+    showItemHtml(item, cachedHtml);
+    return;
+  }
+
   els.loadingState.classList.remove("hidden");
 
   try {
-    if (item.type === "database") {
-      const result =
-        await api.getDatabase(item.url);
+    const result =
+      item.type === "database"
+        ? await api.getDatabase(item.url)
+        : await api.getDoc(item.url);
 
-      els.sheetContent.innerHTML =
-        result.html || "";
+    const html = result.html || "";
 
-      els.sheetContent.classList.remove(
-        "hidden"
-      );
-    } else {
-      const result =
-        await api.getDoc(item.url);
-
-      els.docContent.innerHTML =
-        result.html || "";
-
-      els.docContent.classList.remove(
-        "hidden"
-      );
-    }
+    setCached(item, html);
+    showItemHtml(item, html);
   } catch (error) {
     console.error(
       `讀取「${item.name}」失敗：`,
@@ -441,9 +482,20 @@ async function openItem(item) {
   }
 }
 
-/**
- * 重設內容顯示區
- */
+function showItemHtml(item, html) {
+  if (item.type === "database") {
+    els.sheetContent.innerHTML = html;
+    els.sheetContent.classList.remove("hidden");
+
+    setupLocalTableSearch(item);
+  } else {
+    els.docContent.innerHTML = html;
+    els.docContent.classList.remove("hidden");
+
+    els.localTableSearchWrap.classList.add("hidden");
+  }
+}
+
 function resetDetailView() {
   els.docContent.innerHTML = "";
   els.sheetContent.innerHTML = "";
@@ -452,60 +504,153 @@ function resetDetailView() {
   els.sheetContent.classList.add("hidden");
   els.emptyContent.classList.add("hidden");
   els.loadingState.classList.add("hidden");
+
+  els.localTableSearchWrap.classList.add("hidden");
+  els.localTableSearch.value = "";
+  els.localSearchCount.textContent = "";
 }
 
-/**
- * 顯示空白或錯誤訊息
- */
 function showEmptyContent(title, message) {
   els.loadingState.classList.add("hidden");
 
-  const titleElement =
-    els.emptyContent.querySelector("h3");
+  els.emptyContent
+    .querySelector("h3")
+    .textContent = title;
 
-  const messageElement =
-    els.emptyContent.querySelector("p");
-
-  titleElement.textContent = title;
-  messageElement.textContent = message;
+  els.emptyContent
+    .querySelector("p")
+    .textContent = message;
 
   els.emptyContent.classList.remove("hidden");
+  els.localTableSearchWrap.classList.add("hidden");
 }
 
-/**
- * 搜尋文字標準化
+/* =========================================================
+   Test「有在測項／沒在測項」獨立搜尋
+   ========================================================= */
+
+/*
+ * 只針對 Test 底下的 database 類型顯示。
  *
- * 特性：
- * - 不分大小寫
- * - 忽略半形／全形差異
- * - 忽略空格
- * - 忽略連字號
- * - 忽略底線、斜線與句點
+ * 也就是：
+ * - Test → 有在測項
+ * - Test → 沒在測項
  *
- * 範例：
- * SSRM
- * ssrm
- * Pre-SSRM
- * pre ssrm
- * Pre_SSRM
- *
- * 都能互相比對。
+ * 搜尋只篩選目前開啟的這張表格，
+ * 不會搜尋 Leader、驗證或另一張測項表。
  */
-function normalizeSearchText(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .toLocaleLowerCase("zh-TW")
-    .replace(
-      /[\s\-‐-‒–—―_./\\]+/g,
-      ""
-    );
+function shouldShowLocalSearch(item) {
+  return (
+    item &&
+    item.category === "Test" &&
+    item.type === "database"
+  );
 }
 
-/**
- * 合併搜尋結果並去除重複項目
- */
+function setupLocalTableSearch(item) {
+  if (!shouldShowLocalSearch(item)) {
+    els.localTableSearchWrap.classList.add("hidden");
+    return;
+  }
+
+  const table =
+    els.sheetContent.querySelector("table");
+
+  if (!table) {
+    els.localTableSearchWrap.classList.add("hidden");
+    return;
+  }
+
+  els.localTableSearchWrap.classList.remove("hidden");
+  els.localTableSearch.value = "";
+
+  els.localSearchTitle.textContent =
+    `搜尋「${item.name}」`;
+
+  const rows =
+    Array.from(table.querySelectorAll("tr"));
+
+  const dataRows = rows.slice(1);
+
+  els.localSearchCount.textContent =
+    `共 ${dataRows.length} 筆`;
+
+  /*
+   * 預先整理每列搜尋文字。
+   * 使用者每輸入一個字時，不必重新組合所有欄位，速度較快。
+   */
+  dataRows.forEach((row) => {
+    row.dataset.searchText =
+      normalizeSearchText(row.textContent);
+  });
+
+  els.localTableSearch.oninput = () => {
+    const keyword =
+      normalizeSearchText(
+        els.localTableSearch.value
+      );
+
+    let visibleCount = 0;
+
+    dataRows.forEach((row) => {
+      const matched =
+        !keyword ||
+        row.dataset.searchText.includes(keyword);
+
+      row.classList.toggle(
+        "row-hidden",
+        !matched
+      );
+
+      if (matched) {
+        visibleCount++;
+      }
+    });
+
+    els.localSearchCount.textContent =
+      keyword
+        ? `找到 ${visibleCount} 筆`
+        : `共 ${dataRows.length} 筆`;
+
+    let emptyRow =
+      table.querySelector(
+        ".local-search-empty-row"
+      );
+
+    if (keyword && visibleCount === 0) {
+      if (!emptyRow) {
+        emptyRow =
+          document.createElement("tr");
+
+        emptyRow.className =
+          "local-search-empty-row";
+
+        const cell =
+          document.createElement("td");
+
+        cell.colSpan = Math.max(
+          1,
+          rows[0]?.children.length || 1
+        );
+
+        cell.textContent =
+          "找不到符合的測項";
+
+        emptyRow.appendChild(cell);
+        table.appendChild(emptyRow);
+      }
+    } else if (emptyRow) {
+      emptyRow.remove();
+    }
+  };
+}
+
+/* =========================================================
+   全站搜尋
+   ========================================================= */
+
 function mergeSearchResults(...lists) {
-  const resultMap = new Map();
+  const map = new Map();
 
   lists
     .flat()
@@ -521,163 +666,169 @@ function mergeSearchResults(...lists) {
         item.url || ""
       ].join("|");
 
-      if (!resultMap.has(key)) {
-        resultMap.set(key, item);
+      if (!map.has(key)) {
+        map.set(key, item);
       }
     });
 
-  return Array.from(resultMap.values());
+  return Array.from(map.values());
 }
 
-/**
- * 搜尋輸入防抖
- */
-let searchTimer = null;
+let localSearchTimer = null;
+let remoteSearchTimer = null;
 
 els.searchInput.addEventListener(
   "input",
   () => {
-    window.clearTimeout(searchTimer);
+    window.clearTimeout(localSearchTimer);
+    window.clearTimeout(remoteSearchTimer);
 
-    searchTimer = window.setTimeout(
-      runSearch,
-      350
+    /*
+     * 名稱搜尋先顯示，幾乎立即完成。
+     */
+    localSearchTimer = window.setTimeout(
+      runLocalGlobalSearch,
+      160
+    );
+
+    /*
+     * Google Docs／Google Sheet 全文搜尋較慢。
+     * 等使用者停止輸入 850ms 後才呼叫 Apps Script，
+     * 避免每打一個字就跑一次後端。
+     */
+    remoteSearchTimer = window.setTimeout(
+      runRemoteGlobalSearch,
+      850
     );
   }
 );
 
-/**
- * 執行搜尋
- */
-async function runSearch() {
+function prepareSearchView(keyword) {
+  els.pageTitle.textContent =
+    `搜尋：${keyword}`;
+
+  els.breadcrumb.textContent = "搜尋";
+
+  showOnly(els.searchView);
+}
+
+function getLocalGlobalResults(keyword) {
+  const normalizedKeyword =
+    normalizeSearchText(keyword);
+
+  return state.items.filter((item) => {
+    const target =
+      normalizeSearchText(
+        `${item.category || ""} ${item.name || ""}`
+      );
+
+    return target.includes(
+      normalizedKeyword
+    );
+  });
+}
+
+function runLocalGlobalSearch() {
   const keyword =
     els.searchInput.value.trim();
 
-  /**
-   * 搜尋框清空時回首頁
-   */
   if (!keyword) {
-    els.pageTitle.textContent = "工作 SOP";
-    els.breadcrumb.textContent = "首頁";
+    state.searchRequestId++;
+
+    els.pageTitle.textContent =
+      "工作 SOP";
+
+    els.breadcrumb.textContent =
+      "首頁";
 
     showOnly(els.homeView);
 
     return;
   }
 
-  els.pageTitle.textContent =
-    `搜尋：${keyword}`;
+  prepareSearchView(keyword);
 
-  els.breadcrumb.textContent = "搜尋";
-
-  els.searchResults.innerHTML =
-    "<p>搜尋中…</p>";
-
-  showOnly(els.searchView);
-
-  const normalizedKeyword =
-    normalizeSearchText(keyword);
-
-  /**
-   * 前端立即搜尋：
-   * - 大分類
-   * - SOP 名稱
-   *
-   * 這能確保搜尋 SSRM 時，
-   * Pre-SSRM 一定會被找到。
-   */
   const localResults =
-    state.items.filter((item) => {
-      const target =
-        normalizeSearchText(
-          `${item.category || ""} ${item.name || ""}`
-        );
+    getLocalGlobalResults(keyword);
 
-      return target.includes(
-        normalizedKeyword
-      );
-    });
+  renderSearchResults(localResults);
 
-  /**
-   * 後端全文搜尋：
-   * - Google Docs 內文
-   * - Google Sheet 內容
-   */
-  let remoteResults = [];
+  els.searchStatus.textContent =
+    "已顯示名稱搜尋結果，全文搜尋中…";
+}
+
+async function runRemoteGlobalSearch() {
+  const keyword =
+    els.searchInput.value.trim();
+
+  if (!keyword) {
+    return;
+  }
+
+  const requestId =
+    ++state.searchRequestId;
+
+  const localResults =
+    getLocalGlobalResults(keyword);
 
   try {
     const remote =
       await api.search(keyword);
 
-    if (Array.isArray(remote.items)) {
-      remoteResults = remote.items;
-    }
-  } catch (error) {
-    /**
-     * 後端全文搜尋失敗時，
-     * 仍保留前端名稱搜尋結果。
+    /*
+     * 使用者已經輸入新關鍵字時，
+     * 不顯示上一筆較慢的回應。
      */
+    if (
+      requestId !== state.searchRequestId ||
+      els.searchInput.value.trim() !== keyword
+    ) {
+      return;
+    }
+
+    const remoteResults =
+      Array.isArray(remote.items)
+        ? remote.items
+        : [];
+
+    const results =
+      mergeSearchResults(
+        localResults,
+        remoteResults
+      );
+
+    renderSearchResults(results);
+
+    els.searchStatus.textContent =
+      `共找到 ${results.length} 個結果`;
+  } catch (error) {
+    if (requestId !== state.searchRequestId) {
+      return;
+    }
+
     console.warn(
-      "全文搜尋失敗，改用名稱搜尋：",
+      "全文搜尋失敗，保留名稱搜尋：",
       error
     );
+
+    renderSearchResults(localResults);
+
+    els.searchStatus.textContent =
+      "全文搜尋暫時失敗，目前顯示名稱搜尋結果";
   }
+}
 
-  /**
-   * 合併本機與後端結果。
-   *
-   * 舊版本會讓後端結果覆蓋前端結果，
-   * 因此可能漏掉 Pre-SSRM。
-   */
-  const results =
-    mergeSearchResults(
-      localResults,
-      remoteResults
-    );
-
+function renderSearchResults(results) {
   els.searchResults.innerHTML = "";
 
   if (!results.length) {
-    els.searchResults.innerHTML = `
-      <p>
-        找不到包含「${escapeSearchHtml(keyword)}」的內容。
-      </p>
-    `;
+    els.searchResults.innerHTML =
+      "<p>目前沒有符合的結果。</p>";
 
     return;
   }
 
-  /**
-   * 排序方式：
-   * 1. 名稱完全符合
-   * 2. 名稱包含關鍵字
-   * 3. 內文搜尋結果
-   */
   results.sort((a, b) => {
-    const aName =
-      normalizeSearchText(a.name);
-
-    const bName =
-      normalizeSearchText(b.name);
-
-    const aExact =
-      aName === normalizedKeyword
-        ? 0
-        : aName.includes(normalizedKeyword)
-          ? 1
-          : 2;
-
-    const bExact =
-      bName === normalizedKeyword
-        ? 0
-        : bName.includes(normalizedKeyword)
-          ? 1
-          : 2;
-
-    if (aExact !== bExact) {
-      return aExact - bExact;
-    }
-
     return String(a.name || "")
       .localeCompare(
         String(b.name || ""),
@@ -692,21 +843,10 @@ async function runSearch() {
   });
 }
 
-/**
- * 避免搜尋內容被當成 HTML
- */
-function escapeSearchHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+/* =========================================================
+   登入狀態
+   ========================================================= */
 
-/**
- * 檢查目前登入狀態
- */
 const currentUser = getCurrentUser();
 
 if (currentUser) {
@@ -721,7 +861,8 @@ if (currentUser) {
       );
 
       els.loginMessage.textContent =
-        error.message || "Google 登入失敗";
+        error.message ||
+        "Google 登入失敗";
     }
   );
 }
