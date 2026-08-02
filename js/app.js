@@ -209,7 +209,23 @@ function renderAll() {
 
 function renderMenu() {
   els.menuTree.innerHTML = "";
+const homeButton = document.createElement("button");
 
+homeButton.className = "menu-item home-menu-item";
+homeButton.type = "button";
+homeButton.textContent = "🏠 主頁";
+
+homeButton.addEventListener("click", () => {
+  els.searchInput.value = "";
+
+  els.pageTitle.textContent = "工作 SOP";
+  els.breadcrumb.textContent = "首頁";
+
+  showOnly(els.homeView);
+  closeMobileMenu();
+});
+
+els.menuTree.appendChild(homeButton);
   state.categories.forEach((category) => {
     const items = state.items.filter(
       (item) => item.category === category
