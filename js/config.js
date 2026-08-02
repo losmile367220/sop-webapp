@@ -1,1 +1,1 @@
-export const CONFIG={APPS_SCRIPT_URL:"https://script.google.com/macros/s/AKfycbyqkcKZc4s_f7ZBSwiVqd5wtE2JULZ3mtHRzdaoGHnw7aTguoJCJcTFVQHd8lqqZlJd5Q/exec",GOOGLE_CLIENT_ID:"PASTE_YOUR_GOOGLE_CLIENT_ID_HERE",APP_NAME:"工作 SOP"};
+export const CONFIG={APPS_SCRIPT_URL:"https://script.google.com/macros/s/AKfycbyqkcKZc4s_f7ZBSwiVqd5wtE2JULZ3mtHRzdaoGHnw7aTguoJCJcTFVQHd8lqqZlJd5Q/exec",GOOGLE_CLIENT_ID:"1064949994800-aeumtjnlm49hnf4naqp4aat8p4up2c0u.apps.googleusercontent.com",APP_NAME:"工作 SOP"};
