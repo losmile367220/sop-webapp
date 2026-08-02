@@ -8,7 +8,7 @@
   <title>工作 SOP</title>
 
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=2.1">
+  <link rel="stylesheet" href="./css/style.css?v=3.0">
 </head>
 <body>
   <div id="loginView" class="login-view">
@@ -16,9 +16,7 @@
       <div class="brand-mark">S</div>
       <h1>工作 SOP</h1>
       <p>請使用授權帳號登入後查看內部文件。</p>
-
       <div id="googleLoginBtn"></div>
-
       <p class="small-note">登入後，瀏覽器會保留登入狀態。</p>
       <div id="loginMessage" class="message"></div>
     </div>
@@ -62,32 +60,47 @@
       </header>
 
       <section id="homeView" class="content-view">
-
         <div id="categoryCards" class="card-grid"></div>
 
         <section class="panel">
           <div class="panel-title-row">
             <h3>最近新增</h3>
           </div>
-
           <div id="recentList" class="item-list"></div>
         </section>
       </section>
 
       <section id="detailView" class="content-view hidden">
-        <!-- Test 的「有在測項／沒在測項」專用搜尋 -->
         <div id="localTableSearchWrap" class="local-search-wrap hidden">
           <div class="local-search-heading">
             <strong id="localSearchTitle">搜尋目前測項</strong>
             <span id="localSearchCount" class="local-search-count"></span>
           </div>
 
-          <input
-            id="localTableSearch"
-            type="search"
-            placeholder="只搜尋目前這一張測項表格…"
-            autocomplete="off"
-          >
+          <div class="local-search-row">
+            <input
+              id="localTableSearch"
+              type="search"
+              placeholder="只搜尋目前這一張測項表格…"
+              autocomplete="off"
+            >
+
+            <div id="localSearchNav" class="match-nav hidden">
+              <button id="localPrevBtn" type="button">上一個</button>
+              <span id="localMatchPosition">0 / 0</span>
+              <button id="localNextBtn" type="button">下一個</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="contentSearchNav" class="content-search-nav hidden">
+          <span id="contentSearchLabel"></span>
+
+          <div class="match-nav">
+            <button id="contentPrevBtn" type="button">上一個</button>
+            <span id="contentMatchPosition">0 / 0</span>
+            <button id="contentNextBtn" type="button">下一個</button>
+          </div>
         </div>
 
         <div id="loadingState" class="loading hidden">
@@ -117,6 +130,6 @@
   <div id="mobileOverlay" class="mobile-overlay hidden"></div>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script type="module" src="./js/app.js?v=2.2"></script>
+  <script type="module" src="./js/app.js?v=3.0"></script>
 </body>
 </html>

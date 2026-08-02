@@ -5,33 +5,21 @@ import {
   logout
 } from "./auth.js";
 
-/* =========================================================
-   狀態與快取
-   ========================================================= */
-
 const state = {
   items: [],
   categories: ["Test", "Leader", "驗證"],
   currentItem: null,
-  searchRequestId: 0
+  searchRequestId: 0,
+  pendingGlobalKeyword: "",
+  globalSearchMatches: [],
+  globalSearchIndex: -1,
+  localSearchMatches: [],
+  localSearchIndex: -1
 };
 
-/*
- * 記憶體快取：
- * 同一頁面內第二次打開同一份 SOP／測項時，不再重新呼叫 Apps Script。
- */
 const memoryCache = new Map();
-
-/*
- * sessionStorage 快取：
- * 同一個瀏覽器分頁重新整理後，30 分鐘內仍可快速開啟。
- */
-const CACHE_PREFIX = "sop_content_v2:";
+const CACHE_PREFIX = "sop_content_v3:";
 const CACHE_TTL = 30 * 60 * 1000;
-
-/* =========================================================
-   DOM
-   ========================================================= */
 
 const els = {
   loginView: document.getElementById("loginView"),
@@ -65,25 +53,27 @@ const els = {
   localTableSearchWrap: document.getElementById("localTableSearchWrap"),
   localTableSearch: document.getElementById("localTableSearch"),
   localSearchTitle: document.getElementById("localSearchTitle"),
-  localSearchCount: document.getElementById("localSearchCount")
+  localSearchCount: document.getElementById("localSearchCount"),
+  localSearchNav: document.getElementById("localSearchNav"),
+  localPrevBtn: document.getElementById("localPrevBtn"),
+  localNextBtn: document.getElementById("localNextBtn"),
+  localMatchPosition: document.getElementById("localMatchPosition"),
+
+  contentSearchNav: document.getElementById("contentSearchNav"),
+  contentSearchLabel: document.getElementById("contentSearchLabel"),
+  contentPrevBtn: document.getElementById("contentPrevBtn"),
+  contentNextBtn: document.getElementById("contentNextBtn"),
+  contentMatchPosition: document.getElementById("contentMatchPosition")
 };
 
-/* =========================================================
-   基本事件
-   ========================================================= */
+document.getElementById("logoutBtn").addEventListener("click", logout);
+document.getElementById("menuBtn").addEventListener("click", openMobileMenu);
+els.mobileOverlay.addEventListener("click", closeMobileMenu);
 
-document
-  .getElementById("logoutBtn")
-  .addEventListener("click", logout);
-
-document
-  .getElementById("menuBtn")
-  .addEventListener("click", openMobileMenu);
-
-els.mobileOverlay.addEventListener(
-  "click",
-  closeMobileMenu
-);
+els.localPrevBtn.addEventListener("click", () => moveLocalMatch(-1));
+els.localNextBtn.addEventListener("click", () => moveLocalMatch(1));
+els.contentPrevBtn.addEventListener("click", () => moveGlobalContentMatch(-1));
+els.contentNextBtn.addEventListener("click", () => moveGlobalContentMatch(1));
 
 function openMobileMenu() {
   els.sidebar.classList.add("open");
@@ -96,25 +86,14 @@ function closeMobileMenu() {
 }
 
 function showOnly(view) {
-  [
-    els.homeView,
-    els.detailView,
-    els.searchView
-  ].forEach((element) => {
+  [els.homeView, els.detailView, els.searchView].forEach((element) => {
     element.classList.add("hidden");
   });
-
   view.classList.remove("hidden");
 }
 
-/* =========================================================
-   顯示輔助
-   ========================================================= */
-
 function iconFor(category, type) {
-  if (type === "database") {
-    return "📊";
-  }
+  if (type === "database") return "📊";
 
   const icons = {
     Test: "🧪",
@@ -141,9 +120,133 @@ function normalizeSearchText(value) {
     .replace(/[\s\-‐-‒–—―_./\\]+/g, "");
 }
 
-/* =========================================================
-   啟動
-   ========================================================= */
+function isTextNodeAllowed(node) {
+  const parent = node.parentElement;
+  if (!parent) return false;
+
+  const blockedTags = new Set([
+    "SCRIPT",
+    "STYLE",
+    "NOSCRIPT",
+    "TEXTAREA",
+    "INPUT",
+    "BUTTON",
+    "MARK"
+  ]);
+
+  return !blockedTags.has(parent.tagName);
+}
+
+function clearHighlights(container) {
+  if (!container) return;
+
+  container.querySelectorAll("mark.search-highlight").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent || ""));
+  });
+
+  container.normalize();
+}
+
+function highlightTextInContainer(container, keyword, className = "search-highlight") {
+  clearHighlights(container);
+
+  const normalizedKeyword = normalizeSearchText(keyword);
+  if (!normalizedKeyword) return [];
+
+  const walker = document.createTreeWalker(
+    container,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        if (!node.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
+        if (!isTextNodeAllowed(node)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
+
+  const textNodes = [];
+  let currentNode;
+
+  while ((currentNode = walker.nextNode())) {
+    textNodes.push(currentNode);
+  }
+
+  const marks = [];
+
+  textNodes.forEach((textNode) => {
+    const sourceText = textNode.nodeValue || "";
+    const normalizedSource = normalizeSearchText(sourceText);
+
+    if (!normalizedSource.includes(normalizedKeyword)) return;
+
+    /*
+     * 優先使用一般不分大小寫匹配，保留原始字串位置。
+     * 若使用者搜尋忽略符號後才匹配，則整個文字節點反黃，
+     * 例如 SSRM 對應 Pre-SSRM。
+     */
+    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const directRegex = new RegExp(escapedKeyword, "gi");
+    const directMatches = [...sourceText.matchAll(directRegex)];
+
+    if (directMatches.length) {
+      const fragment = document.createDocumentFragment();
+      let cursor = 0;
+
+      directMatches.forEach((match) => {
+        const index = match.index ?? 0;
+
+        fragment.appendChild(
+          document.createTextNode(sourceText.slice(cursor, index))
+        );
+
+        const mark = document.createElement("mark");
+        mark.className = className;
+        mark.textContent = match[0];
+        fragment.appendChild(mark);
+        marks.push(mark);
+
+        cursor = index + match[0].length;
+      });
+
+      fragment.appendChild(
+        document.createTextNode(sourceText.slice(cursor))
+      );
+
+      textNode.replaceWith(fragment);
+      return;
+    }
+
+    const mark = document.createElement("mark");
+    mark.className = className;
+    mark.textContent = sourceText;
+    textNode.replaceWith(mark);
+    marks.push(mark);
+  });
+
+  return marks;
+}
+
+function setActiveMatch(matches, index, positionElement) {
+  matches.forEach((mark) => mark.classList.remove("active-match"));
+
+  if (!matches.length) {
+    positionElement.textContent = "0 / 0";
+    return;
+  }
+
+  const safeIndex = ((index % matches.length) + matches.length) % matches.length;
+  const active = matches[safeIndex];
+
+  active.classList.add("active-match");
+  active.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+    inline: "nearest"
+  });
+
+  positionElement.textContent = `${safeIndex + 1} / ${matches.length}`;
+}
 
 async function start(user) {
   els.loginView.classList.add("hidden");
@@ -175,21 +278,12 @@ async function start(user) {
 }
 
 function updateCategoryList() {
-  const categories = [
-    "Test",
-    "Leader",
-    "驗證"
-  ];
+  const categories = ["Test", "Leader", "驗證"];
 
   state.items.forEach((item) => {
-    const category = String(
-      item.category || ""
-    ).trim();
+    const category = String(item.category || "").trim();
 
-    if (
-      category &&
-      !categories.includes(category)
-    ) {
+    if (category && !categories.includes(category)) {
       categories.push(category);
     }
   });
@@ -203,37 +297,34 @@ function renderAll() {
   renderRecent();
 }
 
-/* =========================================================
-   左側目錄
-   ========================================================= */
-
-function renderMenu() {
+function renderMenu(keyword = "") {
   els.menuTree.innerHTML = "";
-const homeButton = document.createElement("button");
 
-homeButton.className = "menu-item home-menu-item";
-homeButton.type = "button";
-homeButton.textContent = "🏠 主頁";
+  const homeButton = document.createElement("button");
+  homeButton.className = "menu-item home-menu-item";
+  homeButton.type = "button";
+  homeButton.textContent = "🏠 主頁";
 
-homeButton.addEventListener("click", () => {
-  els.searchInput.value = "";
+  homeButton.addEventListener("click", () => {
+    els.searchInput.value = "";
+    state.pendingGlobalKeyword = "";
 
-  els.pageTitle.textContent = "工作 SOP";
-  els.breadcrumb.textContent = "首頁";
+    els.pageTitle.textContent = "工作 SOP";
+    els.breadcrumb.textContent = "首頁";
 
-  showOnly(els.homeView);
-  closeMobileMenu();
-});
+    renderMenu();
+    showOnly(els.homeView);
+    closeMobileMenu();
+  });
 
-els.menuTree.appendChild(homeButton);
+  els.menuTree.appendChild(homeButton);
+
   state.categories.forEach((category) => {
     const items = state.items.filter(
       (item) => item.category === category
     );
 
-    if (!items.length) {
-      return;
-    }
+    if (!items.length) return;
 
     const group = document.createElement("div");
     group.className = "menu-group";
@@ -241,13 +332,18 @@ els.menuTree.appendChild(homeButton);
     const title = document.createElement("button");
     title.className = "menu-group-title";
     title.type = "button";
-    title.innerHTML = `
-      <span>
-        ${iconFor(category)}
-        ${escapeHtml(category)}
-      </span>
-      <span>${items.length}</span>
-    `;
+
+    const categoryLabel = document.createElement("span");
+    categoryLabel.textContent = `${iconFor(category)} ${category}`;
+    title.appendChild(categoryLabel);
+
+    const count = document.createElement("span");
+    count.textContent = String(items.length);
+    title.appendChild(count);
+
+    if (keyword) {
+      highlightTextInContainer(categoryLabel, keyword);
+    }
 
     const list = document.createElement("div");
     list.className = "menu-items";
@@ -256,13 +352,15 @@ els.menuTree.appendChild(homeButton);
       const button = document.createElement("button");
       button.className = "menu-item";
       button.type = "button";
-      button.textContent =
-        `${iconFor(category, item.type)} ${item.name}`;
+      button.textContent = `${iconFor(category, item.type)} ${item.name}`;
 
-      button.addEventListener(
-        "click",
-        () => openItem(item)
-      );
+      if (keyword) {
+        highlightTextInContainer(button, keyword);
+      }
+
+      button.addEventListener("click", () => {
+        openItem(item, keyword);
+      });
 
       list.appendChild(button);
     });
@@ -273,10 +371,6 @@ els.menuTree.appendChild(homeButton);
   });
 }
 
-/* =========================================================
-   首頁
-   ========================================================= */
-
 function renderCategoryCards() {
   els.categoryCards.innerHTML = "";
 
@@ -285,24 +379,17 @@ function renderCategoryCards() {
       (item) => item.category === category
     ).length;
 
-    if (!count) {
-      return;
-    }
+    if (!count) return;
 
     const card = document.createElement("div");
     card.className = "category-card";
-
     card.innerHTML = `
       <div class="icon">${iconFor(category)}</div>
       <h3>${escapeHtml(category)}</h3>
       <p>${count} 個項目</p>
     `;
 
-    card.addEventListener(
-      "click",
-      () => showCategory(category)
-    );
-
+    card.addEventListener("click", () => showCategory(category));
     els.categoryCards.appendChild(card);
   });
 }
@@ -310,53 +397,52 @@ function renderCategoryCards() {
 function renderRecent() {
   els.recentList.innerHTML = "";
 
-  const items = state.items
-    .slice(-6)
-    .reverse();
+  const items = state.items.slice(-6).reverse();
 
   if (!items.length) {
-    els.recentList.innerHTML =
-      "<p>目前沒有資料。</p>";
-
+    els.recentList.innerHTML = "<p>目前沒有資料。</p>";
     return;
   }
 
   items.forEach((item) => {
-    els.recentList.appendChild(
-      makeItemRow(item)
-    );
+    els.recentList.appendChild(makeItemRow(item));
   });
 }
 
-function makeItemRow(item) {
+function makeItemRow(item, keyword = "") {
   const row = document.createElement("div");
   row.className = "item-row";
 
-  row.innerHTML = `
-    <div>
-      <strong>
-        ${iconFor(item.category, item.type)}
-        ${escapeHtml(item.name)}
-      </strong>
-      <br>
-      <small>${escapeHtml(item.category)}</small>
-    </div>
-    <span>›</span>
-  `;
+  const info = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = `${iconFor(item.category, item.type)} ${item.name}`;
 
-  row.addEventListener(
-    "click",
-    () => openItem(item)
-  );
+  if (keyword) {
+    highlightTextInContainer(title, keyword);
+  }
+
+  const category = document.createElement("small");
+  category.textContent = item.category;
+
+  if (keyword) {
+    highlightTextInContainer(category, keyword);
+  }
+
+  info.append(title, document.createElement("br"), category);
+
+  const arrow = document.createElement("span");
+  arrow.textContent = "›";
+
+  row.append(info, arrow);
+
+  row.addEventListener("click", () => openItem(item, keyword));
 
   return row;
 }
 
 function showCategory(category) {
   els.pageTitle.textContent = category;
-  els.breadcrumb.textContent =
-    `首頁 / ${category}`;
-
+  els.breadcrumb.textContent = `首頁 / ${category}`;
   els.searchResults.innerHTML = "";
   els.searchStatus.textContent = "";
 
@@ -365,22 +451,15 @@ function showCategory(category) {
   );
 
   if (!items.length) {
-    els.searchResults.innerHTML =
-      "<p>目前沒有項目。</p>";
+    els.searchResults.innerHTML = "<p>目前沒有項目。</p>";
   } else {
     items.forEach((item) => {
-      els.searchResults.appendChild(
-        makeItemRow(item)
-      );
+      els.searchResults.appendChild(makeItemRow(item));
     });
   }
 
   showOnly(els.searchView);
 }
-
-/* =========================================================
-   內容快取
-   ========================================================= */
 
 function cacheKey(item) {
   return `${CACHE_PREFIX}${item.type}|${item.url}`;
@@ -396,22 +475,16 @@ function getCached(item) {
   try {
     const raw = sessionStorage.getItem(key);
 
-    if (!raw) {
-      return null;
-    }
+    if (!raw) return null;
 
     const parsed = JSON.parse(raw);
 
-    if (
-      !parsed ||
-      Date.now() - parsed.time > CACHE_TTL
-    ) {
+    if (!parsed || Date.now() - parsed.time > CACHE_TTL) {
       sessionStorage.removeItem(key);
       return null;
     }
 
     memoryCache.set(key, parsed.html);
-
     return parsed.html;
   } catch {
     return null;
@@ -420,7 +493,6 @@ function getCached(item) {
 
 function setCached(item, html) {
   const key = cacheKey(item);
-
   memoryCache.set(key, html);
 
   try {
@@ -432,25 +504,18 @@ function setCached(item, html) {
       })
     );
   } catch {
-    /*
-     * 文件含大量 Base64 圖片時，可能超過 sessionStorage 容量。
-     * 此時保留記憶體快取即可，不影響功能。
-     */
+    // 大型圖片內容超過 sessionStorage 時，保留記憶體快取即可。
   }
 }
 
-/* =========================================================
-   開啟 SOP／Database
-   ========================================================= */
-
-async function openItem(item) {
+async function openItem(item, globalKeyword = "") {
   closeMobileMenu();
 
   state.currentItem = item;
+  state.pendingGlobalKeyword = globalKeyword || state.pendingGlobalKeyword || "";
 
   els.pageTitle.textContent = item.name;
-  els.breadcrumb.textContent =
-    `${item.category} / ${item.name}`;
+  els.breadcrumb.textContent = `${item.category} / ${item.name}`;
 
   showOnly(els.detailView);
   resetDetailView();
@@ -460,7 +525,6 @@ async function openItem(item) {
       "內容準備中",
       "這個項目目前尚未加入內容，之後更新後會顯示在這裡。"
     );
-
     return;
   }
 
@@ -468,6 +532,7 @@ async function openItem(item) {
 
   if (cachedHtml !== null) {
     showItemHtml(item, cachedHtml);
+    applyPendingGlobalHighlight();
     return;
   }
 
@@ -483,11 +548,9 @@ async function openItem(item) {
 
     setCached(item, html);
     showItemHtml(item, html);
+    applyPendingGlobalHighlight();
   } catch (error) {
-    console.error(
-      `讀取「${item.name}」失敗：`,
-      error
-    );
+    console.error(`讀取「${item.name}」失敗：`, error);
 
     showEmptyContent(
       "讀取失敗",
@@ -502,12 +565,10 @@ function showItemHtml(item, html) {
   if (item.type === "database") {
     els.sheetContent.innerHTML = html;
     els.sheetContent.classList.remove("hidden");
-
     setupLocalTableSearch(item);
   } else {
     els.docContent.innerHTML = html;
     els.docContent.classList.remove("hidden");
-
     els.localTableSearchWrap.classList.add("hidden");
   }
 }
@@ -524,37 +585,74 @@ function resetDetailView() {
   els.localTableSearchWrap.classList.add("hidden");
   els.localTableSearch.value = "";
   els.localSearchCount.textContent = "";
+  els.localSearchNav.classList.add("hidden");
+
+  els.contentSearchNav.classList.add("hidden");
+  els.contentSearchLabel.textContent = "";
+  els.contentMatchPosition.textContent = "0 / 0";
+
+  state.globalSearchMatches = [];
+  state.globalSearchIndex = -1;
+  state.localSearchMatches = [];
+  state.localSearchIndex = -1;
 }
 
 function showEmptyContent(title, message) {
   els.loadingState.classList.add("hidden");
 
-  els.emptyContent
-    .querySelector("h3")
-    .textContent = title;
-
-  els.emptyContent
-    .querySelector("p")
-    .textContent = message;
+  els.emptyContent.querySelector("h3").textContent = title;
+  els.emptyContent.querySelector("p").textContent = message;
 
   els.emptyContent.classList.remove("hidden");
   els.localTableSearchWrap.classList.add("hidden");
+  els.contentSearchNav.classList.add("hidden");
 }
 
-/* =========================================================
-   Test「有在測項／沒在測項」獨立搜尋
-   ========================================================= */
+function applyPendingGlobalHighlight() {
+  const keyword = state.pendingGlobalKeyword.trim();
 
-/*
- * 只針對 Test 底下的 database 類型顯示。
- *
- * 也就是：
- * - Test → 有在測項
- * - Test → 沒在測項
- *
- * 搜尋只篩選目前開啟的這張表格，
- * 不會搜尋 Leader、驗證或另一張測項表。
- */
+  if (!keyword) {
+    els.contentSearchNav.classList.add("hidden");
+    return;
+  }
+
+  const container = state.currentItem?.type === "database"
+    ? els.sheetContent
+    : els.docContent;
+
+  state.globalSearchMatches =
+    highlightTextInContainer(container, keyword, "search-highlight global-highlight");
+
+  state.globalSearchIndex = state.globalSearchMatches.length ? 0 : -1;
+
+  els.contentSearchLabel.textContent =
+    state.globalSearchMatches.length
+      ? `已標示「${keyword}」`
+      : `目前頁面沒有「${keyword}」`;
+
+  els.contentSearchNav.classList.remove("hidden");
+
+  setActiveMatch(
+    state.globalSearchMatches,
+    state.globalSearchIndex,
+    els.contentMatchPosition
+  );
+}
+
+function moveGlobalContentMatch(direction) {
+  if (!state.globalSearchMatches.length) return;
+
+  state.globalSearchIndex =
+    (state.globalSearchIndex + direction + state.globalSearchMatches.length) %
+    state.globalSearchMatches.length;
+
+  setActiveMatch(
+    state.globalSearchMatches,
+    state.globalSearchIndex,
+    els.contentMatchPosition
+  );
+}
+
 function shouldShowLocalSearch(item) {
   return (
     item &&
@@ -569,8 +667,7 @@ function setupLocalTableSearch(item) {
     return;
   }
 
-  const table =
-    els.sheetContent.querySelector("table");
+  const table = els.sheetContent.querySelector("table");
 
   if (!table) {
     els.localTableSearchWrap.classList.add("hidden");
@@ -579,32 +676,22 @@ function setupLocalTableSearch(item) {
 
   els.localTableSearchWrap.classList.remove("hidden");
   els.localTableSearch.value = "";
+  els.localSearchTitle.textContent = `搜尋「${item.name}」`;
 
-  els.localSearchTitle.textContent =
-    `搜尋「${item.name}」`;
-
-  const rows =
-    Array.from(table.querySelectorAll("tr"));
-
+  const rows = Array.from(table.querySelectorAll("tr"));
   const dataRows = rows.slice(1);
 
-  els.localSearchCount.textContent =
-    `共 ${dataRows.length} 筆`;
+  els.localSearchCount.textContent = `共 ${dataRows.length} 筆`;
 
-  /*
-   * 預先整理每列搜尋文字。
-   * 使用者每輸入一個字時，不必重新組合所有欄位，速度較快。
-   */
   dataRows.forEach((row) => {
-    row.dataset.searchText =
-      normalizeSearchText(row.textContent);
+    row.dataset.searchText = normalizeSearchText(row.textContent);
   });
 
   els.localTableSearch.oninput = () => {
-    const keyword =
-      normalizeSearchText(
-        els.localTableSearch.value
-      );
+    const rawKeyword = els.localTableSearch.value;
+    const keyword = normalizeSearchText(rawKeyword);
+
+    clearHighlights(table);
 
     let visibleCount = 0;
 
@@ -613,14 +700,9 @@ function setupLocalTableSearch(item) {
         !keyword ||
         row.dataset.searchText.includes(keyword);
 
-      row.classList.toggle(
-        "row-hidden",
-        !matched
-      );
+      row.classList.toggle("row-hidden", !matched);
 
-      if (matched) {
-        visibleCount++;
-      }
+      if (matched) visibleCount++;
     });
 
     els.localSearchCount.textContent =
@@ -629,28 +711,16 @@ function setupLocalTableSearch(item) {
         : `共 ${dataRows.length} 筆`;
 
     let emptyRow =
-      table.querySelector(
-        ".local-search-empty-row"
-      );
+      table.querySelector(".local-search-empty-row");
 
     if (keyword && visibleCount === 0) {
       if (!emptyRow) {
-        emptyRow =
-          document.createElement("tr");
+        emptyRow = document.createElement("tr");
+        emptyRow.className = "local-search-empty-row";
 
-        emptyRow.className =
-          "local-search-empty-row";
-
-        const cell =
-          document.createElement("td");
-
-        cell.colSpan = Math.max(
-          1,
-          rows[0]?.children.length || 1
-        );
-
-        cell.textContent =
-          "找不到符合的測項";
+        const cell = document.createElement("td");
+        cell.colSpan = Math.max(1, rows[0]?.children.length || 1);
+        cell.textContent = "找不到符合的測項";
 
         emptyRow.appendChild(cell);
         table.appendChild(emptyRow);
@@ -658,34 +728,60 @@ function setupLocalTableSearch(item) {
     } else if (emptyRow) {
       emptyRow.remove();
     }
+
+    state.localSearchMatches = rawKeyword
+      ? highlightTextInContainer(table, rawKeyword, "search-highlight local-highlight")
+      : [];
+
+    state.localSearchIndex =
+      state.localSearchMatches.length ? 0 : -1;
+
+    if (state.localSearchMatches.length) {
+      els.localSearchNav.classList.remove("hidden");
+
+      setActiveMatch(
+        state.localSearchMatches,
+        state.localSearchIndex,
+        els.localMatchPosition
+      );
+    } else {
+      els.localSearchNav.classList.add("hidden");
+      els.localMatchPosition.textContent = "0 / 0";
+    }
   };
 }
 
-/* =========================================================
-   全站搜尋
-   ========================================================= */
+function moveLocalMatch(direction) {
+  if (!state.localSearchMatches.length) return;
+
+  state.localSearchIndex =
+    (state.localSearchIndex + direction + state.localSearchMatches.length) %
+    state.localSearchMatches.length;
+
+  setActiveMatch(
+    state.localSearchMatches,
+    state.localSearchIndex,
+    els.localMatchPosition
+  );
+}
 
 function mergeSearchResults(...lists) {
   const map = new Map();
 
-  lists
-    .flat()
-    .forEach((item) => {
-      if (!item) {
-        return;
-      }
+  lists.flat().forEach((item) => {
+    if (!item) return;
 
-      const key = [
-        item.type || "",
-        item.category || "",
-        item.name || "",
-        item.url || ""
-      ].join("|");
+    const key = [
+      item.type || "",
+      item.category || "",
+      item.name || "",
+      item.url || ""
+    ].join("|");
 
-      if (!map.has(key)) {
-        map.set(key, item);
-      }
-    });
+    if (!map.has(key)) {
+      map.set(key, item);
+    }
+  });
 
   return Array.from(map.values());
 }
@@ -693,108 +789,76 @@ function mergeSearchResults(...lists) {
 let localSearchTimer = null;
 let remoteSearchTimer = null;
 
-els.searchInput.addEventListener(
-  "input",
-  () => {
-    window.clearTimeout(localSearchTimer);
-    window.clearTimeout(remoteSearchTimer);
+els.searchInput.addEventListener("input", () => {
+  window.clearTimeout(localSearchTimer);
+  window.clearTimeout(remoteSearchTimer);
 
-    /*
-     * 名稱搜尋先顯示，幾乎立即完成。
-     */
-    localSearchTimer = window.setTimeout(
-      runLocalGlobalSearch,
-      160
-    );
+  localSearchTimer = window.setTimeout(
+    runLocalGlobalSearch,
+    160
+  );
 
-    /*
-     * Google Docs／Google Sheet 全文搜尋較慢。
-     * 等使用者停止輸入 850ms 後才呼叫 Apps Script，
-     * 避免每打一個字就跑一次後端。
-     */
-    remoteSearchTimer = window.setTimeout(
-      runRemoteGlobalSearch,
-      850
-    );
-  }
-);
+  remoteSearchTimer = window.setTimeout(
+    runRemoteGlobalSearch,
+    850
+  );
+});
 
 function prepareSearchView(keyword) {
-  els.pageTitle.textContent =
-    `搜尋：${keyword}`;
-
+  els.pageTitle.textContent = `搜尋：${keyword}`;
   els.breadcrumb.textContent = "搜尋";
-
   showOnly(els.searchView);
 }
 
 function getLocalGlobalResults(keyword) {
-  const normalizedKeyword =
-    normalizeSearchText(keyword);
+  const normalizedKeyword = normalizeSearchText(keyword);
 
   return state.items.filter((item) => {
-    const target =
-      normalizeSearchText(
-        `${item.category || ""} ${item.name || ""}`
-      );
-
-    return target.includes(
-      normalizedKeyword
+    const target = normalizeSearchText(
+      `${item.category || ""} ${item.name || ""}`
     );
+
+    return target.includes(normalizedKeyword);
   });
 }
 
 function runLocalGlobalSearch() {
-  const keyword =
-    els.searchInput.value.trim();
+  const keyword = els.searchInput.value.trim();
+
+  state.pendingGlobalKeyword = keyword;
+  renderMenu(keyword);
 
   if (!keyword) {
     state.searchRequestId++;
 
-    els.pageTitle.textContent =
-      "工作 SOP";
+    els.pageTitle.textContent = "工作 SOP";
+    els.breadcrumb.textContent = "首頁";
 
-    els.breadcrumb.textContent =
-      "首頁";
-
+    renderMenu();
     showOnly(els.homeView);
-
     return;
   }
 
   prepareSearchView(keyword);
 
-  const localResults =
-    getLocalGlobalResults(keyword);
-
-  renderSearchResults(localResults);
+  const localResults = getLocalGlobalResults(keyword);
+  renderSearchResults(localResults, keyword);
 
   els.searchStatus.textContent =
     "已顯示名稱搜尋結果，全文搜尋中…";
 }
 
 async function runRemoteGlobalSearch() {
-  const keyword =
-    els.searchInput.value.trim();
+  const keyword = els.searchInput.value.trim();
 
-  if (!keyword) {
-    return;
-  }
+  if (!keyword) return;
 
-  const requestId =
-    ++state.searchRequestId;
-
-  const localResults =
-    getLocalGlobalResults(keyword);
+  const requestId = ++state.searchRequestId;
+  const localResults = getLocalGlobalResults(keyword);
 
   try {
-    const remote =
-      await api.search(keyword);
+    const remote = await api.search(keyword);
 
-    /*
-     * 使用者已經輸入新關鍵字時，
-     * 不顯示上一筆較慢的回應。
-     */
     if (
       requestId !== state.searchRequestId ||
       els.searchInput.value.trim() !== keyword
@@ -802,45 +866,40 @@ async function runRemoteGlobalSearch() {
       return;
     }
 
-    const remoteResults =
-      Array.isArray(remote.items)
-        ? remote.items
-        : [];
+    const remoteResults = Array.isArray(remote.items)
+      ? remote.items
+      : [];
 
-    const results =
-      mergeSearchResults(
-        localResults,
-        remoteResults
-      );
+    const results = mergeSearchResults(
+      localResults,
+      remoteResults
+    );
 
-    renderSearchResults(results);
+    renderSearchResults(results, keyword);
 
     els.searchStatus.textContent =
       `共找到 ${results.length} 個結果`;
   } catch (error) {
-    if (requestId !== state.searchRequestId) {
-      return;
-    }
+    if (requestId !== state.searchRequestId) return;
 
     console.warn(
       "全文搜尋失敗，保留名稱搜尋：",
       error
     );
 
-    renderSearchResults(localResults);
+    renderSearchResults(localResults, keyword);
 
     els.searchStatus.textContent =
       "全文搜尋暫時失敗，目前顯示名稱搜尋結果";
   }
 }
 
-function renderSearchResults(results) {
+function renderSearchResults(results, keyword = "") {
   els.searchResults.innerHTML = "";
 
   if (!results.length) {
     els.searchResults.innerHTML =
-      "<p>目前沒有符合的結果。</p>";
-
+      `<p>找不到包含「${escapeHtml(keyword)}」的結果。</p>`;
     return;
   }
 
@@ -854,14 +913,10 @@ function renderSearchResults(results) {
 
   results.forEach((item) => {
     els.searchResults.appendChild(
-      makeItemRow(item)
+      makeItemRow(item, keyword)
     );
   });
 }
-
-/* =========================================================
-   登入狀態
-   ========================================================= */
 
 const currentUser = getCurrentUser();
 
@@ -877,8 +932,7 @@ if (currentUser) {
       );
 
       els.loginMessage.textContent =
-        error.message ||
-        "Google 登入失敗";
+        error.message || "Google 登入失敗";
     }
   );
 }

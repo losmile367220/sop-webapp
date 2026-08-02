@@ -1,38 +1,26 @@
-/* =========================================================
-   基本設定
-   ========================================================= */
-
 :root {
   --bg: #f6f7fb;
   --surface: #ffffff;
   --surface-soft: #fafbfe;
-
   --line: #e3e7ef;
   --line-dark: #d4dae5;
-
   --text: #1f2530;
   --text-soft: #344054;
   --muted: #6f7889;
-
   --accent: #6674ff;
   --accent-dark: #5261eb;
   --accent-soft: #eef0ff;
-
   --sidebar: #111827;
   --sidebar-soft: #1f2937;
   --sidebar-hover: #263246;
-
   --danger: #b42318;
-
+  --highlight: #ffe66d;
+  --highlight-active: #ffbf47;
   --radius-small: 10px;
   --radius-medium: 16px;
   --radius-large: 22px;
-
-  --shadow-small:
-    0 6px 16px rgba(35, 42, 70, 0.05);
-
-  --shadow:
-    0 14px 36px rgba(35, 42, 70, 0.08);
+  --shadow-small: 0 6px 16px rgba(35, 42, 70, 0.05);
+  --shadow: 0 14px 36px rgba(35, 42, 70, 0.08);
 }
 
 * {
@@ -47,7 +35,6 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-
   font-family:
     -apple-system,
     BlinkMacSystemFont,
@@ -56,10 +43,8 @@ body {
     "Microsoft JhengHei",
     Arial,
     sans-serif;
-
   background: var(--bg);
   color: var(--text);
-
   overflow-x: hidden;
 }
 
@@ -80,123 +65,75 @@ img {
   display: none !important;
 }
 
-
-/* =========================================================
-   登入畫面
-   ========================================================= */
-
 .login-view {
   min-height: 100vh;
-
   display: grid;
   place-items: center;
-
   padding: 24px;
-
   background:
-    radial-gradient(
-      circle at top left,
-      #edf0ff,
-      transparent 40%
-    ),
+    radial-gradient(circle at top left, #edf0ff, transparent 40%),
     var(--bg);
 }
 
 .login-card {
   width: min(420px, 100%);
-
   padding: 36px;
-
   text-align: center;
-
   background: var(--surface);
-
   border: 1px solid var(--line);
   border-radius: 28px;
-
   box-shadow: var(--shadow);
 }
 
 .login-card h1 {
   margin: 0 0 10px;
-
   font-size: 30px;
 }
 
 .login-card p {
   margin: 0 0 20px;
-
   color: var(--muted);
   line-height: 1.7;
 }
 
 .small-note {
   margin-top: 16px !important;
-
   font-size: 13px;
 }
 
 .message {
   margin-top: 14px;
-
   color: var(--danger);
   font-size: 14px;
 }
 
-
-/* =========================================================
-   Logo
-   ========================================================= */
-
 .brand-mark {
   width: 58px;
   height: 58px;
-
   display: grid;
   place-items: center;
-
   margin: 0 auto 18px;
-
   color: white;
-
   font-size: 28px;
   font-weight: 800;
-
   border-radius: 18px;
-
-  background:
-    linear-gradient(
-      135deg,
-      #6575ff,
-      #8793ff
-    );
+  background: linear-gradient(135deg, #6575ff, #8793ff);
 }
 
 .brand-mark.small {
   width: 42px;
   height: 42px;
-
   margin: 0;
-
   font-size: 20px;
-
   border-radius: 13px;
 }
-
-
-/* =========================================================
-   按鈕
-   ========================================================= */
 
 .primary-btn,
 .ghost-btn {
   border: 0;
   border-radius: 12px;
-
   padding: 12px 16px;
-
   cursor: pointer;
-
   transition:
     transform 0.15s ease,
     background 0.15s ease;
@@ -204,10 +141,8 @@ img {
 
 .primary-btn {
   width: 100%;
-
   color: white;
   background: var(--accent);
-
   font-weight: 700;
 }
 
@@ -229,14 +164,8 @@ img {
   transform: scale(0.98);
 }
 
-
-/* =========================================================
-   主框架
-   ========================================================= */
-
 .app-shell {
   min-height: 100vh;
-
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
 }
@@ -245,26 +174,16 @@ img {
   min-width: 0;
 }
 
-
-/* =========================================================
-   左側選單
-   ========================================================= */
-
 .sidebar {
   position: sticky;
   top: 0;
-
   height: 100vh;
-
   padding: 22px 18px;
-
   display: flex;
   flex-direction: column;
   gap: 20px;
-
   color: white;
   background: var(--sidebar);
-
   overflow: hidden;
 }
 
@@ -276,32 +195,24 @@ img {
 
 .brand-row strong {
   display: block;
-
   font-size: 17px;
 }
 
 .brand-row span {
   display: block;
-
   margin-top: 2px;
-
   color: #9ca3af;
   font-size: 12px;
 }
 
 .search-wrap input {
   width: 100%;
-
   padding: 12px 14px;
-
   color: white;
   background: var(--sidebar-soft);
-
   border: 1px solid #2d3748;
   border-radius: 12px;
-
   outline: none;
-
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -313,19 +224,14 @@ img {
 
 .search-wrap input:focus {
   border-color: #7481ff;
-
-  box-shadow:
-    0 0 0 3px rgba(102, 116, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(102, 116, 255, 0.2);
 }
 
 .menu-tree {
   flex: 1;
-
   overflow-y: auto;
   overflow-x: hidden;
-
   padding-right: 4px;
-
   scrollbar-width: thin;
   scrollbar-color: #4b5563 transparent;
 }
@@ -340,7 +246,6 @@ img {
 
 .menu-tree::-webkit-scrollbar-thumb {
   background: #4b5563;
-
   border-radius: 10px;
 }
 
@@ -350,22 +255,16 @@ img {
 
 .menu-group-title {
   width: 100%;
-
   display: flex;
   align-items: center;
   justify-content: space-between;
-
   padding: 11px 10px;
-
   color: white;
   background: transparent;
-
   border: 0;
   border-radius: 10px;
-
   font-weight: 700;
   text-align: left;
-
   cursor: pointer;
 }
 
@@ -379,19 +278,13 @@ img {
 
 .menu-item {
   width: 100%;
-
   padding: 10px 12px;
-
   color: #cbd5e1;
   background: transparent;
-
   border: 0;
   border-radius: 9px;
-
   text-align: left;
-
   cursor: pointer;
-
   overflow-wrap: anywhere;
 }
 
@@ -401,169 +294,85 @@ img {
   background: var(--sidebar-hover);
 }
 
+.home-menu-item {
+  margin-bottom: 12px;
+  color: white;
+  background: var(--sidebar-soft);
+  font-weight: 700;
+}
+
 .sidebar-footer {
   padding-top: 14px;
-
   border-top: 1px solid #293548;
 }
 
 .user-email {
   margin-bottom: 10px;
-
   color: #aeb8c8;
   font-size: 12px;
-
   word-break: break-all;
 }
-
-
-/* =========================================================
-   上方標題列
-   ========================================================= */
 
 .topbar {
   position: sticky;
   top: 0;
   z-index: 10;
-
   min-height: 94px;
-
   padding: 18px 28px;
-
   display: flex;
   align-items: center;
   gap: 14px;
-
-  background:
-    rgba(246, 247, 251, 0.92);
-
+  background: rgba(246, 247, 251, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-
   border-bottom: 1px solid var(--line);
 }
 
 .topbar h1 {
   margin: 2px 0 0;
-
   font-size: 28px;
   line-height: 1.25;
-
   overflow-wrap: anywhere;
 }
 
 .breadcrumb {
   color: var(--muted);
   font-size: 13px;
-
   overflow-wrap: anywhere;
 }
 
 .menu-btn {
   display: none;
-
   padding: 9px 11px;
-
   color: var(--text);
   background: white;
-
   border: 1px solid var(--line);
   border-radius: 10px;
-
   cursor: pointer;
 }
-
-
-/* =========================================================
-   主要內容
-   ========================================================= */
 
 .content-view {
   width: 100%;
   max-width: 1500px;
-
   margin: 0 auto;
   padding: 28px;
 }
 
-
-/* =========================================================
-   首頁 Hero
-   ========================================================= */
-
-.hero {
-  padding: 34px;
-
-  background:
-    linear-gradient(
-      135deg,
-      #ffffff,
-      #f0f2ff
-    );
-
-  border: 1px solid var(--line);
-  border-radius: 26px;
-
-  box-shadow: var(--shadow);
-}
-
-.hero h2 {
-  max-width: 820px;
-
-  margin: 8px 0 12px;
-
-  font-size:
-    clamp(28px, 4vw, 48px);
-
-  line-height: 1.18;
-}
-
-.hero p {
-  margin: 0;
-
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1.7;
-}
-
-.eyebrow {
-  color: var(--accent);
-
-  font-size: 12px;
-  font-weight: 800;
-
-  letter-spacing: 0.08em;
-}
-
-
-/* =========================================================
-   分類卡片
-   ========================================================= */
-
 .card-grid {
   display: grid;
-  grid-template-columns:
-    repeat(3, minmax(0, 1fr));
-
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
-
-  margin: 24px 0;
+  margin: 0 0 24px;
 }
 
 .category-card {
   min-width: 0;
-
   padding: 22px;
-
   background: var(--surface);
-
   border: 1px solid var(--line);
   border-radius: var(--radius-large);
-
   box-shadow: var(--shadow);
-
   cursor: pointer;
-
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease;
@@ -571,9 +380,7 @@ img {
 
 .category-card:hover {
   transform: translateY(-3px);
-
-  box-shadow:
-    0 18px 42px rgba(35, 42, 70, 0.12);
+  box-shadow: 0 18px 42px rgba(35, 42, 70, 0.12);
 }
 
 .category-card .icon {
@@ -582,29 +389,19 @@ img {
 
 .category-card h3 {
   margin: 14px 0 8px;
-
   font-size: 22px;
 }
 
 .category-card p {
   margin: 0;
-
   color: var(--muted);
 }
 
-
-/* =========================================================
-   Panel 與清單
-   ========================================================= */
-
 .panel {
   padding: 22px;
-
   background: var(--surface);
-
   border: 1px solid var(--line);
   border-radius: var(--radius-large);
-
   box-shadow: var(--shadow);
 }
 
@@ -627,18 +424,12 @@ img {
   display: flex;
   align-items: center;
   justify-content: space-between;
-
   gap: 14px;
-
   padding: 14px;
-
   background: white;
-
   border: 1px solid var(--line);
   border-radius: 13px;
-
   cursor: pointer;
-
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
@@ -661,54 +452,55 @@ img {
   color: var(--muted);
 }
 
-
-/* =========================================================
-   Test 獨立搜尋
-   ========================================================= */
-
-.local-search-wrap {
+.local-search-wrap,
+.content-search-nav {
   display: grid;
   gap: 10px;
-
   margin-bottom: 14px;
   padding: 14px;
-
   background: white;
-
   border: 1px solid var(--line);
   border-radius: var(--radius-medium);
-
   box-shadow: var(--shadow-small);
+}
+
+.local-search-heading,
+.local-search-row,
+.content-search-nav {
+  align-items: center;
 }
 
 .local-search-heading {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-
   gap: 12px;
+}
+
+.local-search-row,
+.content-search-nav {
+  display: flex;
+  gap: 10px;
+}
+
+.local-search-row input {
+  flex: 1;
+  min-width: 0;
 }
 
 .local-search-count {
   color: var(--muted);
   font-size: 13px;
-
   white-space: nowrap;
 }
 
 .local-search-wrap input {
   width: 100%;
-
   padding: 12px 14px;
-
   color: var(--text);
   background: white;
-
   border: 1px solid #dbe1eb;
   border-radius: 12px;
-
   outline: none;
-
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -716,36 +508,48 @@ img {
 
 .local-search-wrap input:focus {
   border-color: var(--accent);
-
-  box-shadow:
-    0 0 0 3px rgba(102, 116, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(102, 116, 255, 0.12);
 }
 
+.content-search-nav {
+  display: flex;
+  justify-content: space-between;
+}
 
-/* =========================================================
-   Google Docs 顯示
-   ========================================================= */
+.match-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.match-nav button {
+  padding: 8px 11px;
+  color: var(--text);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.match-nav button:hover {
+  background: var(--accent-soft);
+}
+
+.match-nav span {
+  min-width: 62px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
 
 .doc-content {
   padding: 28px;
-
   background: white;
-
   border: 1px solid var(--line);
   border-radius: var(--radius-large);
-
   box-shadow: var(--shadow);
-
   line-height: 1.75;
-
   overflow-wrap: anywhere;
-}
-
-.doc-content h1,
-.doc-content h2,
-.doc-content h3,
-.doc-content h4 {
-  line-height: 1.35;
 }
 
 .doc-content p {
@@ -754,101 +558,57 @@ img {
 
 .doc-content a {
   color: var(--accent);
-
   word-break: break-all;
 }
 
 .doc-content img,
 .doc-image {
   display: block;
-
   max-width: 100%;
   height: auto;
-
   margin: 16px auto;
-
   border-radius: 12px;
-
   box-shadow: var(--shadow-small);
 }
 
-.doc-list-item {
-  display: flex;
-  align-items: flex-start;
-
-  gap: 8px;
-
-  margin: 7px 0;
-}
-
-.doc-list-bullet {
-  flex: 0 0 auto;
-
-  color: var(--accent);
-}
-
-
-/* =========================================================
-   Google Sheet 顯示：電腦版
-   ========================================================= */
-
 .sheet-content {
   padding: 26px;
-
   background: white;
-
   border: 1px solid var(--line);
   border-radius: var(--radius-large);
-
   box-shadow: var(--shadow);
-
   overflow: auto;
 }
 
-.doc-table-wrap,
 .database-table-wrap {
   width: 100%;
-
   overflow-x: auto;
-
   border-radius: 12px;
 }
 
-.doc-content table,
 .sheet-content table {
   width: 100%;
   min-width: 900px;
-
   border-collapse: collapse;
-
   background: white;
 }
 
-.doc-content th,
-.doc-content td,
 .sheet-content th,
 .sheet-content td {
   padding: 12px 14px;
-
   vertical-align: top;
-
   border: 1px solid #dfe3ea;
-
   line-height: 1.55;
-
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.doc-content th,
 .sheet-content th {
   position: sticky;
   top: 0;
   z-index: 2;
-
   background: #f3f5f9;
-
   font-weight: 700;
   text-align: center;
 }
@@ -865,37 +625,40 @@ img {
   min-width: 500px;
 }
 
-
-/* =========================================================
-   表格搜尋結果
-   ========================================================= */
-
 .row-hidden {
   display: none !important;
 }
 
 .local-search-empty-row td {
   padding: 28px !important;
-
   text-align: center;
-
   color: var(--muted);
   background: var(--surface-soft);
 }
 
+mark.search-highlight {
+  padding: 0.05em 0.12em;
+  color: inherit;
+  background: var(--highlight);
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 
-/* =========================================================
-   載入、空白與錯誤
-   ========================================================= */
+mark.search-highlight.active-match {
+  background: var(--highlight-active);
+  outline: 3px solid rgba(255, 191, 71, 0.35);
+}
+
+.sidebar mark.search-highlight {
+  color: #111827;
+}
 
 .loading,
 .empty-state {
   padding: 36px;
-
   text-align: center;
-
   background: white;
-
   border: 1px dashed #cdd3df;
   border-radius: 18px;
 }
@@ -908,15 +671,11 @@ img {
 .spinner {
   width: 34px;
   height: 34px;
-
   margin: 0 auto 12px;
-
   border: 4px solid #e8ebf3;
   border-top-color: var(--accent);
   border-radius: 50%;
-
-  animation:
-    spin 0.75s linear infinite;
+  animation: spin 0.75s linear infinite;
 }
 
 @keyframes spin {
@@ -927,50 +686,30 @@ img {
 
 .search-status {
   margin: -6px 0 12px;
-
   color: var(--muted);
   font-size: 13px;
 }
-
-
-/* =========================================================
-   手機遮罩
-   ========================================================= */
 
 .mobile-overlay {
   position: fixed;
   inset: 0;
   z-index: 20;
-
-  background:
-    rgba(0, 0, 0, 0.38);
+  background: rgba(0, 0, 0, 0.38);
 }
-
-
-/* =========================================================
-   平板
-   ========================================================= */
 
 @media (max-width: 1000px) {
   .app-shell {
-    grid-template-columns:
-      270px minmax(0, 1fr);
+    grid-template-columns: 270px minmax(0, 1fr);
   }
 
   .card-grid {
-    grid-template-columns:
-      repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .content-view {
     padding: 22px;
   }
 }
-
-
-/* =========================================================
-   手機主框架
-   ========================================================= */
 
 @media (max-width: 900px) {
   .app-shell {
@@ -982,14 +721,10 @@ img {
     top: 0;
     left: 0;
     z-index: 30;
-
     width: min(300px, 88vw);
     height: 100dvh;
-
     transform: translateX(-102%);
-
-    transition:
-      transform 0.2s ease;
+    transition: transform 0.2s ease;
   }
 
   .sidebar.open {
@@ -1002,7 +737,6 @@ img {
 
   .topbar {
     min-height: 78px;
-
     padding: 14px 18px;
   }
 
@@ -1018,41 +752,29 @@ img {
     grid-template-columns: 1fr;
   }
 
-  .hero {
-    padding: 24px;
-  }
-
-  .hero h2 {
-    font-size: 30px;
-  }
-
   .doc-content,
   .sheet-content {
     padding: 16px;
   }
 
-  .local-search-heading {
-    align-items: flex-start;
+  .local-search-heading,
+  .local-search-row,
+  .content-search-nav {
+    align-items: stretch;
     flex-direction: column;
+  }
 
-    gap: 4px;
+  .match-nav {
+    justify-content: space-between;
   }
 }
-
-
-/* =========================================================
-   手機：Test 表格轉成卡片
-   ========================================================= */
 
 @media (max-width: 700px) {
   .sheet-content {
     padding: 8px;
-
     background: transparent;
-
     border: 0;
     box-shadow: none;
-
     overflow: visible;
   }
 
@@ -1062,10 +784,8 @@ img {
 
   .sheet-content table {
     display: block;
-
     width: 100%;
     min-width: 0;
-
     border-collapse: separate;
     border-spacing: 0;
   }
@@ -1075,84 +795,58 @@ img {
     gap: 14px;
   }
 
-  /*
-   * Apps Script 產生的表格未必有 thead，
-   * 第一列通常是欄位名稱，所以手機直接隱藏第一列。
-   */
   .sheet-content tr:first-child {
     display: none;
   }
 
   .sheet-content tr {
     display: block;
-
     width: 100%;
-
     padding: 16px;
-
     background: white;
-
     border: 1px solid var(--line);
     border-radius: 17px;
-
     box-shadow: var(--shadow-small);
   }
 
   .sheet-content td {
     display: block;
-
     width: 100%;
     min-width: 0 !important;
-
     padding: 9px 0;
-
     border: 0;
-
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 
-  /*
-   * 第一欄 Name 直接當卡片標題，
-   * 不再重複顯示「Name」文字。
-   */
   .sheet-content td:nth-child(1) {
     padding-top: 0;
     padding-bottom: 12px;
-
     color: var(--text);
-
     font-size: 19px;
     font-weight: 750;
     line-height: 1.4;
-
     border-bottom: 1px solid var(--line);
   }
 
   .sheet-content td:nth-child(2) {
     padding-top: 12px;
-
     color: var(--text-soft);
   }
 
   .sheet-content td:nth-child(3) {
     color: #475467;
-
     line-height: 1.7;
   }
 
   .sheet-content td:nth-child(2)::before,
   .sheet-content td:nth-child(3)::before {
     display: block;
-
     margin-bottom: 5px;
-
     color: var(--muted);
-
     font-size: 12px;
     font-weight: 700;
-
     letter-spacing: 0.03em;
   }
 
@@ -1170,11 +864,8 @@ img {
 
   .local-search-empty-row td {
     display: block;
-
     padding: 24px !important;
-
     border: 0;
-
     text-align: center;
   }
 
@@ -1182,11 +873,6 @@ img {
     display: none;
   }
 }
-
-
-/* =========================================================
-   超小型手機
-   ========================================================= */
 
 @media (max-width: 420px) {
   .content-view {
@@ -1201,19 +887,12 @@ img {
     font-size: 21px;
   }
 
-  .hero {
-    padding: 20px;
-  }
-
-  .hero h2 {
-    font-size: 27px;
-  }
-
   .panel {
     padding: 15px;
   }
 
-  .local-search-wrap {
+  .local-search-wrap,
+  .content-search-nav {
     padding: 12px;
   }
 
