@@ -8,7 +8,7 @@
   <title>工作 SOP</title>
 
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=3.0">
+  <link rel="stylesheet" href="./css/style.css?v=4.0">
 </head>
 <body>
   <div id="loginView" class="login-view">
@@ -71,38 +71,6 @@
       </section>
 
       <section id="detailView" class="content-view hidden">
-        <div id="localTableSearchWrap" class="local-search-wrap hidden">
-          <div class="local-search-heading">
-            <strong id="localSearchTitle">搜尋目前測項</strong>
-            <span id="localSearchCount" class="local-search-count"></span>
-          </div>
-
-          <div class="local-search-row">
-            <input
-              id="localTableSearch"
-              type="search"
-              placeholder="只搜尋目前這一張測項表格…"
-              autocomplete="off"
-            >
-
-            <div id="localSearchNav" class="match-nav hidden">
-              <button id="localPrevBtn" type="button">上一個</button>
-              <span id="localMatchPosition">0 / 0</span>
-              <button id="localNextBtn" type="button">下一個</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="contentSearchNav" class="content-search-nav hidden">
-          <span id="contentSearchLabel"></span>
-
-          <div class="match-nav">
-            <button id="contentPrevBtn" type="button">上一個</button>
-            <span id="contentMatchPosition">0 / 0</span>
-            <button id="contentNextBtn" type="button">下一個</button>
-          </div>
-        </div>
-
         <div id="loadingState" class="loading hidden">
           <div class="spinner"></div>
           <p>載入中…</p>
@@ -127,9 +95,34 @@
     </main>
   </div>
 
+  <!-- 浮動頁內搜尋 -->
+  <button
+    id="floatingSearchToggle"
+    class="floating-search-toggle hidden"
+    type="button"
+    aria-label="開啟頁內搜尋"
+    title="頁內搜尋"
+  >
+    🔍
+  </button>
+
+  <div id="floatingSearchBar" class="floating-search-bar hidden">
+    <input
+      id="floatingSearchInput"
+      type="search"
+      placeholder="搜尋目前頁面…"
+      autocomplete="off"
+    >
+
+    <button id="floatingPrevBtn" type="button" title="上一個">▲</button>
+    <span id="floatingMatchPosition">0 / 0</span>
+    <button id="floatingNextBtn" type="button" title="下一個">▼</button>
+    <button id="floatingSearchClose" type="button" class="floating-close-btn" title="關閉">✕</button>
+  </div>
+
   <div id="mobileOverlay" class="mobile-overlay hidden"></div>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script type="module" src="./js/app.js?v=3.0"></script>
+  <script type="module" src="./js/app.js?v=4.0"></script>
 </body>
 </html>

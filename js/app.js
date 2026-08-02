@@ -11,14 +11,12 @@ const state = {
   currentItem: null,
   searchRequestId: 0,
   pendingGlobalKeyword: "",
-  globalSearchMatches: [],
-  globalSearchIndex: -1,
-  localSearchMatches: [],
-  localSearchIndex: -1
+  floatingMatches: [],
+  floatingMatchIndex: -1
 };
 
 const memoryCache = new Map();
-const CACHE_PREFIX = "sop_content_v3:";
+const CACHE_PREFIX = "sop_content_v4:";
 const CACHE_TTL = 30 * 60 * 1000;
 
 const els = {
@@ -50,30 +48,36 @@ const els = {
   sidebar: document.querySelector(".sidebar"),
   mobileOverlay: document.getElementById("mobileOverlay"),
 
-  localTableSearchWrap: document.getElementById("localTableSearchWrap"),
-  localTableSearch: document.getElementById("localTableSearch"),
-  localSearchTitle: document.getElementById("localSearchTitle"),
-  localSearchCount: document.getElementById("localSearchCount"),
-  localSearchNav: document.getElementById("localSearchNav"),
-  localPrevBtn: document.getElementById("localPrevBtn"),
-  localNextBtn: document.getElementById("localNextBtn"),
-  localMatchPosition: document.getElementById("localMatchPosition"),
-
-  contentSearchNav: document.getElementById("contentSearchNav"),
-  contentSearchLabel: document.getElementById("contentSearchLabel"),
-  contentPrevBtn: document.getElementById("contentPrevBtn"),
-  contentNextBtn: document.getElementById("contentNextBtn"),
-  contentMatchPosition: document.getElementById("contentMatchPosition")
+  floatingSearchToggle: document.getElementById("floatingSearchToggle"),
+  floatingSearchBar: document.getElementById("floatingSearchBar"),
+  floatingSearchInput: document.getElementById("floatingSearchInput"),
+  floatingPrevBtn: document.getElementById("floatingPrevBtn"),
+  floatingNextBtn: document.getElementById("floatingNextBtn"),
+  floatingMatchPosition: document.getElementById("floatingMatchPosition"),
+  floatingSearchClose: document.getElementById("floatingSearchClose")
 };
 
 document.getElementById("logoutBtn").addEventListener("click", logout);
 document.getElementById("menuBtn").addEventListener("click", openMobileMenu);
 els.mobileOverlay.addEventListener("click", closeMobileMenu);
 
-els.localPrevBtn.addEventListener("click", () => moveLocalMatch(-1));
-els.localNextBtn.addEventListener("click", () => moveLocalMatch(1));
-els.contentPrevBtn.addEventListener("click", () => moveGlobalContentMatch(-1));
-els.contentNextBtn.addEventListener("click", () => moveGlobalContentMatch(1));
+els.floatingSearchToggle.addEventListener("click", openFloatingSearch);
+els.floatingSearchClose.addEventListener("click", closeFloatingSearch);
+els.floatingPrevBtn.addEventListener("click", () => moveFloatingMatch(-1));
+els.floatingNextBtn.addEventListener("click", () => moveFloatingMatch(1));
+
+els.floatingSearchInput.addEventListener("input", runFloatingSearch);
+els.floatingSearchInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+
+  event.preventDefault();
+
+  if (event.shiftKey) {
+    moveFloatingMatch(-1);
+  } else {
+    moveFloatingMatch(1);
+  }
+});
 
 function openMobileMenu() {
   els.sidebar.classList.add("open");
@@ -89,6 +93,7 @@ function showOnly(view) {
   [els.homeView, els.detailView, els.searchView].forEach((element) => {
     element.classList.add("hidden");
   });
+
   view.classList.remove("hidden");
 }
 
@@ -140,14 +145,18 @@ function isTextNodeAllowed(node) {
 function clearHighlights(container) {
   if (!container) return;
 
-  container.querySelectorAll("mark.search-highlight").forEach((mark) => {
-    mark.replaceWith(document.createTextNode(mark.textContent || ""));
-  });
+  container
+    .querySelectorAll("mark.search-highlight")
+    .forEach((mark) => {
+      mark.replaceWith(
+        document.createTextNode(mark.textContent || "")
+      );
+    });
 
   container.normalize();
 }
 
-function highlightTextInContainer(container, keyword, className = "search-highlight") {
+function highlightTextInContainer(container, keyword) {
   clearHighlights(container);
 
   const normalizedKeyword = normalizeSearchText(keyword);
@@ -158,18 +167,24 @@ function highlightTextInContainer(container, keyword, className = "search-highli
     NodeFilter.SHOW_TEXT,
     {
       acceptNode(node) {
-        if (!node.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
-        if (!isTextNodeAllowed(node)) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue?.trim()) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        if (!isTextNodeAllowed(node)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
         return NodeFilter.FILTER_ACCEPT;
       }
     }
   );
 
   const textNodes = [];
-  let currentNode;
+  let node;
 
-  while ((currentNode = walker.nextNode())) {
-    textNodes.push(currentNode);
+  while ((node = walker.nextNode())) {
+    textNodes.push(node);
   }
 
   const marks = [];
@@ -178,31 +193,47 @@ function highlightTextInContainer(container, keyword, className = "search-highli
     const sourceText = textNode.nodeValue || "";
     const normalizedSource = normalizeSearchText(sourceText);
 
-    if (!normalizedSource.includes(normalizedKeyword)) return;
+    if (!normalizedSource.includes(normalizedKeyword)) {
+      return;
+    }
 
-    /*
-     * 優先使用一般不分大小寫匹配，保留原始字串位置。
-     * 若使用者搜尋忽略符號後才匹配，則整個文字節點反黃，
-     * 例如 SSRM 對應 Pre-SSRM。
-     */
-    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const directRegex = new RegExp(escapedKeyword, "gi");
-    const directMatches = [...sourceText.matchAll(directRegex)];
+    const escapedKeyword = keyword.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
+
+    const directRegex = new RegExp(
+      escapedKeyword,
+      "gi"
+    );
+
+    const directMatches = [
+      ...sourceText.matchAll(directRegex)
+    ];
 
     if (directMatches.length) {
-      const fragment = document.createDocumentFragment();
+      const fragment =
+        document.createDocumentFragment();
+
       let cursor = 0;
 
       directMatches.forEach((match) => {
         const index = match.index ?? 0;
 
         fragment.appendChild(
-          document.createTextNode(sourceText.slice(cursor, index))
+          document.createTextNode(
+            sourceText.slice(cursor, index)
+          )
         );
 
-        const mark = document.createElement("mark");
-        mark.className = className;
+        const mark =
+          document.createElement("mark");
+
+        mark.className =
+          "search-highlight";
+
         mark.textContent = match[0];
+
         fragment.appendChild(mark);
         marks.push(mark);
 
@@ -210,16 +241,28 @@ function highlightTextInContainer(container, keyword, className = "search-highli
       });
 
       fragment.appendChild(
-        document.createTextNode(sourceText.slice(cursor))
+        document.createTextNode(
+          sourceText.slice(cursor)
+        )
       );
 
       textNode.replaceWith(fragment);
       return;
     }
 
-    const mark = document.createElement("mark");
-    mark.className = className;
+    /*
+     * 例如搜尋 SSRM，來源是 Pre-SSRM。
+     * 忽略符號後相符，但無法直接取得精準索引時，
+     * 將整個文字片段標黃。
+     */
+    const mark =
+      document.createElement("mark");
+
+    mark.className =
+      "search-highlight";
+
     mark.textContent = sourceText;
+
     textNode.replaceWith(mark);
     marks.push(mark);
   });
@@ -227,25 +270,145 @@ function highlightTextInContainer(container, keyword, className = "search-highli
   return marks;
 }
 
-function setActiveMatch(matches, index, positionElement) {
-  matches.forEach((mark) => mark.classList.remove("active-match"));
+function setActiveMatch(matches, index) {
+  matches.forEach((mark) => {
+    mark.classList.remove("active-match");
+  });
 
   if (!matches.length) {
-    positionElement.textContent = "0 / 0";
+    els.floatingMatchPosition.textContent =
+      "0 / 0";
+
     return;
   }
 
-  const safeIndex = ((index % matches.length) + matches.length) % matches.length;
+  const safeIndex =
+    ((index % matches.length) +
+      matches.length) %
+    matches.length;
+
   const active = matches[safeIndex];
 
   active.classList.add("active-match");
+
   active.scrollIntoView({
     behavior: "smooth",
     block: "center",
     inline: "nearest"
   });
 
-  positionElement.textContent = `${safeIndex + 1} / ${matches.length}`;
+  els.floatingMatchPosition.textContent =
+    `${safeIndex + 1} / ${matches.length}`;
+}
+
+function getCurrentContentContainer() {
+  if (
+    !els.detailView.classList.contains("hidden")
+  ) {
+    if (
+      !els.sheetContent.classList.contains("hidden")
+    ) {
+      return els.sheetContent;
+    }
+
+    if (
+      !els.docContent.classList.contains("hidden")
+    ) {
+      return els.docContent;
+    }
+  }
+
+  return null;
+}
+
+function showFloatingSearchButton() {
+  if (
+    els.detailView.classList.contains("hidden")
+  ) {
+    els.floatingSearchToggle.classList.add("hidden");
+    els.floatingSearchBar.classList.add("hidden");
+    return;
+  }
+
+  els.floatingSearchToggle.classList.remove("hidden");
+}
+
+function openFloatingSearch() {
+  els.floatingSearchToggle.classList.add("hidden");
+  els.floatingSearchBar.classList.remove("hidden");
+
+  els.floatingSearchInput.focus();
+  els.floatingSearchInput.select();
+}
+
+function closeFloatingSearch() {
+  const container =
+    getCurrentContentContainer();
+
+  clearHighlights(container);
+
+  state.floatingMatches = [];
+  state.floatingMatchIndex = -1;
+
+  els.floatingSearchInput.value = "";
+  els.floatingMatchPosition.textContent = "0 / 0";
+
+  els.floatingSearchBar.classList.add("hidden");
+
+  if (
+    !els.detailView.classList.contains("hidden")
+  ) {
+    els.floatingSearchToggle.classList.remove("hidden");
+  }
+}
+
+function runFloatingSearch() {
+  const container =
+    getCurrentContentContainer();
+
+  const keyword =
+    els.floatingSearchInput.value.trim();
+
+  if (!container) {
+    return;
+  }
+
+  state.floatingMatches =
+    keyword
+      ? highlightTextInContainer(
+          container,
+          keyword
+        )
+      : [];
+
+  state.floatingMatchIndex =
+    state.floatingMatches.length
+      ? 0
+      : -1;
+
+  setActiveMatch(
+    state.floatingMatches,
+    state.floatingMatchIndex
+  );
+}
+
+function moveFloatingMatch(direction) {
+  if (!state.floatingMatches.length) {
+    return;
+  }
+
+  state.floatingMatchIndex =
+    (
+      state.floatingMatchIndex +
+      direction +
+      state.floatingMatches.length
+    ) %
+    state.floatingMatches.length;
+
+  setActiveMatch(
+    state.floatingMatches,
+    state.floatingMatchIndex
+  );
 }
 
 async function start(user) {
@@ -263,7 +426,10 @@ async function start(user) {
     updateCategoryList();
     renderAll();
   } catch (error) {
-    console.error("取得目錄失敗：", error);
+    console.error(
+      "取得目錄失敗：",
+      error
+    );
 
     state.items = [];
     renderAll();
@@ -271,19 +437,31 @@ async function start(user) {
     els.recentList.innerHTML = `
       <div class="empty-state">
         <h3>資料讀取失敗</h3>
-        <p>${escapeHtml(error.message || "無法取得 SOP 資料")}</p>
+        <p>${escapeHtml(
+          error.message ||
+          "無法取得 SOP 資料"
+        )}</p>
       </div>
     `;
   }
 }
 
 function updateCategoryList() {
-  const categories = ["Test", "Leader", "驗證"];
+  const categories = [
+    "Test",
+    "Leader",
+    "驗證"
+  ];
 
   state.items.forEach((item) => {
-    const category = String(item.category || "").trim();
+    const category =
+      String(item.category || "")
+        .trim();
 
-    if (category && !categories.includes(category)) {
+    if (
+      category &&
+      !categories.includes(category)
+    ) {
       categories.push(category);
     }
   });
@@ -300,73 +478,116 @@ function renderAll() {
 function renderMenu(keyword = "") {
   els.menuTree.innerHTML = "";
 
-  const homeButton = document.createElement("button");
-  homeButton.className = "menu-item home-menu-item";
+  const homeButton =
+    document.createElement("button");
+
+  homeButton.className =
+    "menu-item home-menu-item";
+
   homeButton.type = "button";
   homeButton.textContent = "🏠 主頁";
 
-  homeButton.addEventListener("click", () => {
-    els.searchInput.value = "";
-    state.pendingGlobalKeyword = "";
+  homeButton.addEventListener(
+    "click",
+    () => {
+      els.searchInput.value = "";
+      state.pendingGlobalKeyword = "";
 
-    els.pageTitle.textContent = "工作 SOP";
-    els.breadcrumb.textContent = "首頁";
+      els.pageTitle.textContent =
+        "工作 SOP";
 
-    renderMenu();
-    showOnly(els.homeView);
-    closeMobileMenu();
-  });
+      els.breadcrumb.textContent =
+        "首頁";
+
+      renderMenu();
+      closeFloatingSearch();
+      showOnly(els.homeView);
+      closeMobileMenu();
+    }
+  );
 
   els.menuTree.appendChild(homeButton);
 
   state.categories.forEach((category) => {
     const items = state.items.filter(
-      (item) => item.category === category
+      (item) =>
+        item.category === category
     );
 
     if (!items.length) return;
 
-    const group = document.createElement("div");
+    const group =
+      document.createElement("div");
+
     group.className = "menu-group";
 
-    const title = document.createElement("button");
-    title.className = "menu-group-title";
+    const title =
+      document.createElement("button");
+
+    title.className =
+      "menu-group-title";
+
     title.type = "button";
 
-    const categoryLabel = document.createElement("span");
-    categoryLabel.textContent = `${iconFor(category)} ${category}`;
+    const categoryLabel =
+      document.createElement("span");
+
+    categoryLabel.textContent =
+      `${iconFor(category)} ${category}`;
+
     title.appendChild(categoryLabel);
 
-    const count = document.createElement("span");
-    count.textContent = String(items.length);
+    const count =
+      document.createElement("span");
+
+    count.textContent =
+      String(items.length);
+
     title.appendChild(count);
 
     if (keyword) {
-      highlightTextInContainer(categoryLabel, keyword);
+      highlightTextInContainer(
+        categoryLabel,
+        keyword
+      );
     }
 
-    const list = document.createElement("div");
+    const list =
+      document.createElement("div");
+
     list.className = "menu-items";
 
     items.forEach((item) => {
-      const button = document.createElement("button");
+      const button =
+        document.createElement("button");
+
       button.className = "menu-item";
       button.type = "button";
-      button.textContent = `${iconFor(category, item.type)} ${item.name}`;
+
+      button.textContent =
+        `${iconFor(
+          category,
+          item.type
+        )} ${item.name}`;
 
       if (keyword) {
-        highlightTextInContainer(button, keyword);
+        highlightTextInContainer(
+          button,
+          keyword
+        );
       }
 
-      button.addEventListener("click", () => {
-        openItem(item, keyword);
-      });
+      button.addEventListener(
+        "click",
+        () => openItem(item, keyword)
+      );
 
       list.appendChild(button);
     });
 
     group.appendChild(title);
     group.appendChild(list);
+
     els.menuTree.appendChild(group);
   });
 }
@@ -375,21 +596,33 @@ function renderCategoryCards() {
   els.categoryCards.innerHTML = "";
 
   state.categories.forEach((category) => {
-    const count = state.items.filter(
-      (item) => item.category === category
-    ).length;
+    const count =
+      state.items.filter(
+        (item) =>
+          item.category === category
+      ).length;
 
     if (!count) return;
 
-    const card = document.createElement("div");
-    card.className = "category-card";
+    const card =
+      document.createElement("div");
+
+    card.className =
+      "category-card";
+
     card.innerHTML = `
-      <div class="icon">${iconFor(category)}</div>
+      <div class="icon">
+        ${iconFor(category)}
+      </div>
       <h3>${escapeHtml(category)}</h3>
       <p>${count} 個項目</p>
     `;
 
-    card.addEventListener("click", () => showCategory(category));
+    card.addEventListener(
+      "click",
+      () => showCategory(category)
+    );
+
     els.categoryCards.appendChild(card);
   });
 }
@@ -397,67 +630,110 @@ function renderCategoryCards() {
 function renderRecent() {
   els.recentList.innerHTML = "";
 
-  const items = state.items.slice(-6).reverse();
+  const items =
+    state.items
+      .slice(-6)
+      .reverse();
 
   if (!items.length) {
-    els.recentList.innerHTML = "<p>目前沒有資料。</p>";
+    els.recentList.innerHTML =
+      "<p>目前沒有資料。</p>";
+
     return;
   }
 
   items.forEach((item) => {
-    els.recentList.appendChild(makeItemRow(item));
+    els.recentList.appendChild(
+      makeItemRow(item)
+    );
   });
 }
 
 function makeItemRow(item, keyword = "") {
-  const row = document.createElement("div");
+  const row =
+    document.createElement("div");
+
   row.className = "item-row";
 
-  const info = document.createElement("div");
-  const title = document.createElement("strong");
-  title.textContent = `${iconFor(item.category, item.type)} ${item.name}`;
+  const info =
+    document.createElement("div");
+
+  const title =
+    document.createElement("strong");
+
+  title.textContent =
+    `${iconFor(
+      item.category,
+      item.type
+    )} ${item.name}`;
 
   if (keyword) {
-    highlightTextInContainer(title, keyword);
+    highlightTextInContainer(
+      title,
+      keyword
+    );
   }
 
-  const category = document.createElement("small");
-  category.textContent = item.category;
+  const category =
+    document.createElement("small");
+
+  category.textContent =
+    item.category;
 
   if (keyword) {
-    highlightTextInContainer(category, keyword);
+    highlightTextInContainer(
+      category,
+      keyword
+    );
   }
 
-  info.append(title, document.createElement("br"), category);
+  info.append(
+    title,
+    document.createElement("br"),
+    category
+  );
 
-  const arrow = document.createElement("span");
+  const arrow =
+    document.createElement("span");
+
   arrow.textContent = "›";
 
   row.append(info, arrow);
 
-  row.addEventListener("click", () => openItem(item, keyword));
+  row.addEventListener(
+    "click",
+    () => openItem(item, keyword)
+  );
 
   return row;
 }
 
 function showCategory(category) {
   els.pageTitle.textContent = category;
-  els.breadcrumb.textContent = `首頁 / ${category}`;
+  els.breadcrumb.textContent =
+    `首頁 / ${category}`;
+
   els.searchResults.innerHTML = "";
   els.searchStatus.textContent = "";
 
-  const items = state.items.filter(
-    (item) => item.category === category
-  );
+  const items =
+    state.items.filter(
+      (item) =>
+        item.category === category
+    );
 
   if (!items.length) {
-    els.searchResults.innerHTML = "<p>目前沒有項目。</p>";
+    els.searchResults.innerHTML =
+      "<p>目前沒有項目。</p>";
   } else {
     items.forEach((item) => {
-      els.searchResults.appendChild(makeItemRow(item));
+      els.searchResults.appendChild(
+        makeItemRow(item)
+      );
     });
   }
 
+  closeFloatingSearch();
   showOnly(els.searchView);
 }
 
@@ -473,18 +749,28 @@ function getCached(item) {
   }
 
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw =
+      sessionStorage.getItem(key);
 
     if (!raw) return null;
 
-    const parsed = JSON.parse(raw);
+    const parsed =
+      JSON.parse(raw);
 
-    if (!parsed || Date.now() - parsed.time > CACHE_TTL) {
+    if (
+      !parsed ||
+      Date.now() - parsed.time >
+        CACHE_TTL
+    ) {
       sessionStorage.removeItem(key);
       return null;
     }
 
-    memoryCache.set(key, parsed.html);
+    memoryCache.set(
+      key,
+      parsed.html
+    );
+
     return parsed.html;
   } catch {
     return null;
@@ -493,6 +779,7 @@ function getCached(item) {
 
 function setCached(item, html) {
   const key = cacheKey(item);
+
   memoryCache.set(key, html);
 
   try {
@@ -504,19 +791,29 @@ function setCached(item, html) {
       })
     );
   } catch {
-    // 大型圖片內容超過 sessionStorage 時，保留記憶體快取即可。
+    // 大型圖片超出容量時，保留記憶體快取即可。
   }
 }
 
-async function openItem(item, globalKeyword = "") {
+async function openItem(
+  item,
+  globalKeyword = ""
+) {
   closeMobileMenu();
 
   state.currentItem = item;
-  state.pendingGlobalKeyword = globalKeyword || state.pendingGlobalKeyword || "";
+  state.pendingGlobalKeyword =
+    globalKeyword ||
+    state.pendingGlobalKeyword ||
+    "";
 
-  els.pageTitle.textContent = item.name;
-  els.breadcrumb.textContent = `${item.category} / ${item.name}`;
+  els.pageTitle.textContent =
+    item.name;
 
+  els.breadcrumb.textContent =
+    `${item.category} / ${item.name}`;
+
+  closeFloatingSearch();
   showOnly(els.detailView);
   resetDetailView();
 
@@ -525,18 +822,30 @@ async function openItem(item, globalKeyword = "") {
       "內容準備中",
       "這個項目目前尚未加入內容，之後更新後會顯示在這裡。"
     );
+
     return;
   }
 
-  const cachedHtml = getCached(item);
+  const cachedHtml =
+    getCached(item);
 
   if (cachedHtml !== null) {
     showItemHtml(item, cachedHtml);
-    applyPendingGlobalHighlight();
+    showFloatingSearchButton();
+
+    if (state.pendingGlobalKeyword) {
+      openFloatingSearch();
+      els.floatingSearchInput.value =
+        state.pendingGlobalKeyword;
+      runFloatingSearch();
+    }
+
     return;
   }
 
-  els.loadingState.classList.remove("hidden");
+  els.loadingState.classList.remove(
+    "hidden"
+  );
 
   try {
     const result =
@@ -548,28 +857,43 @@ async function openItem(item, globalKeyword = "") {
 
     setCached(item, html);
     showItemHtml(item, html);
-    applyPendingGlobalHighlight();
+    showFloatingSearchButton();
+
+    if (state.pendingGlobalKeyword) {
+      openFloatingSearch();
+      els.floatingSearchInput.value =
+        state.pendingGlobalKeyword;
+      runFloatingSearch();
+    }
   } catch (error) {
-    console.error(`讀取「${item.name}」失敗：`, error);
+    console.error(
+      `讀取「${item.name}」失敗：`,
+      error
+    );
 
     showEmptyContent(
       "讀取失敗",
-      error.message || "無法讀取此項目"
+      error.message ||
+      "無法讀取此項目"
     );
   } finally {
-    els.loadingState.classList.add("hidden");
+    els.loadingState.classList.add(
+      "hidden"
+    );
   }
 }
 
 function showItemHtml(item, html) {
   if (item.type === "database") {
     els.sheetContent.innerHTML = html;
-    els.sheetContent.classList.remove("hidden");
-    setupLocalTableSearch(item);
+    els.sheetContent.classList.remove(
+      "hidden"
+    );
   } else {
     els.docContent.innerHTML = html;
-    els.docContent.classList.remove("hidden");
-    els.localTableSearchWrap.classList.add("hidden");
+    els.docContent.classList.remove(
+      "hidden"
+    );
   }
 }
 
@@ -582,186 +906,48 @@ function resetDetailView() {
   els.emptyContent.classList.add("hidden");
   els.loadingState.classList.add("hidden");
 
-  els.localTableSearchWrap.classList.add("hidden");
-  els.localTableSearch.value = "";
-  els.localSearchCount.textContent = "";
-  els.localSearchNav.classList.add("hidden");
+  state.floatingMatches = [];
+  state.floatingMatchIndex = -1;
 
-  els.contentSearchNav.classList.add("hidden");
-  els.contentSearchLabel.textContent = "";
-  els.contentMatchPosition.textContent = "0 / 0";
+  els.floatingSearchInput.value = "";
+  els.floatingMatchPosition.textContent =
+    "0 / 0";
 
-  state.globalSearchMatches = [];
-  state.globalSearchIndex = -1;
-  state.localSearchMatches = [];
-  state.localSearchIndex = -1;
-}
+  els.floatingSearchBar.classList.add(
+    "hidden"
+  );
 
-function showEmptyContent(title, message) {
-  els.loadingState.classList.add("hidden");
-
-  els.emptyContent.querySelector("h3").textContent = title;
-  els.emptyContent.querySelector("p").textContent = message;
-
-  els.emptyContent.classList.remove("hidden");
-  els.localTableSearchWrap.classList.add("hidden");
-  els.contentSearchNav.classList.add("hidden");
-}
-
-function applyPendingGlobalHighlight() {
-  const keyword = state.pendingGlobalKeyword.trim();
-
-  if (!keyword) {
-    els.contentSearchNav.classList.add("hidden");
-    return;
-  }
-
-  const container = state.currentItem?.type === "database"
-    ? els.sheetContent
-    : els.docContent;
-
-  state.globalSearchMatches =
-    highlightTextInContainer(container, keyword, "search-highlight global-highlight");
-
-  state.globalSearchIndex = state.globalSearchMatches.length ? 0 : -1;
-
-  els.contentSearchLabel.textContent =
-    state.globalSearchMatches.length
-      ? `已標示「${keyword}」`
-      : `目前頁面沒有「${keyword}」`;
-
-  els.contentSearchNav.classList.remove("hidden");
-
-  setActiveMatch(
-    state.globalSearchMatches,
-    state.globalSearchIndex,
-    els.contentMatchPosition
+  els.floatingSearchToggle.classList.add(
+    "hidden"
   );
 }
 
-function moveGlobalContentMatch(direction) {
-  if (!state.globalSearchMatches.length) return;
-
-  state.globalSearchIndex =
-    (state.globalSearchIndex + direction + state.globalSearchMatches.length) %
-    state.globalSearchMatches.length;
-
-  setActiveMatch(
-    state.globalSearchMatches,
-    state.globalSearchIndex,
-    els.contentMatchPosition
+function showEmptyContent(
+  title,
+  message
+) {
+  els.loadingState.classList.add(
+    "hidden"
   );
-}
 
-function shouldShowLocalSearch(item) {
-  return (
-    item &&
-    item.category === "Test" &&
-    item.type === "database"
+  els.emptyContent
+    .querySelector("h3")
+    .textContent = title;
+
+  els.emptyContent
+    .querySelector("p")
+    .textContent = message;
+
+  els.emptyContent.classList.remove(
+    "hidden"
   );
-}
 
-function setupLocalTableSearch(item) {
-  if (!shouldShowLocalSearch(item)) {
-    els.localTableSearchWrap.classList.add("hidden");
-    return;
-  }
+  els.floatingSearchToggle.classList.add(
+    "hidden"
+  );
 
-  const table = els.sheetContent.querySelector("table");
-
-  if (!table) {
-    els.localTableSearchWrap.classList.add("hidden");
-    return;
-  }
-
-  els.localTableSearchWrap.classList.remove("hidden");
-  els.localTableSearch.value = "";
-  els.localSearchTitle.textContent = `搜尋「${item.name}」`;
-
-  const rows = Array.from(table.querySelectorAll("tr"));
-  const dataRows = rows.slice(1);
-
-  els.localSearchCount.textContent = `共 ${dataRows.length} 筆`;
-
-  dataRows.forEach((row) => {
-    row.dataset.searchText = normalizeSearchText(row.textContent);
-  });
-
-  els.localTableSearch.oninput = () => {
-    const rawKeyword = els.localTableSearch.value;
-    const keyword = normalizeSearchText(rawKeyword);
-
-    clearHighlights(table);
-
-    let visibleCount = 0;
-
-    dataRows.forEach((row) => {
-      const matched =
-        !keyword ||
-        row.dataset.searchText.includes(keyword);
-
-      row.classList.toggle("row-hidden", !matched);
-
-      if (matched) visibleCount++;
-    });
-
-    els.localSearchCount.textContent =
-      keyword
-        ? `找到 ${visibleCount} 筆`
-        : `共 ${dataRows.length} 筆`;
-
-    let emptyRow =
-      table.querySelector(".local-search-empty-row");
-
-    if (keyword && visibleCount === 0) {
-      if (!emptyRow) {
-        emptyRow = document.createElement("tr");
-        emptyRow.className = "local-search-empty-row";
-
-        const cell = document.createElement("td");
-        cell.colSpan = Math.max(1, rows[0]?.children.length || 1);
-        cell.textContent = "找不到符合的測項";
-
-        emptyRow.appendChild(cell);
-        table.appendChild(emptyRow);
-      }
-    } else if (emptyRow) {
-      emptyRow.remove();
-    }
-
-    state.localSearchMatches = rawKeyword
-      ? highlightTextInContainer(table, rawKeyword, "search-highlight local-highlight")
-      : [];
-
-    state.localSearchIndex =
-      state.localSearchMatches.length ? 0 : -1;
-
-    if (state.localSearchMatches.length) {
-      els.localSearchNav.classList.remove("hidden");
-
-      setActiveMatch(
-        state.localSearchMatches,
-        state.localSearchIndex,
-        els.localMatchPosition
-      );
-    } else {
-      els.localSearchNav.classList.add("hidden");
-      els.localMatchPosition.textContent = "0 / 0";
-    }
-  };
-}
-
-function moveLocalMatch(direction) {
-  if (!state.localSearchMatches.length) return;
-
-  state.localSearchIndex =
-    (state.localSearchIndex + direction + state.localSearchMatches.length) %
-    state.localSearchMatches.length;
-
-  setActiveMatch(
-    state.localSearchMatches,
-    state.localSearchIndex,
-    els.localMatchPosition
+  els.floatingSearchBar.classList.add(
+    "hidden"
   );
 }
 
@@ -789,41 +975,61 @@ function mergeSearchResults(...lists) {
 let localSearchTimer = null;
 let remoteSearchTimer = null;
 
-els.searchInput.addEventListener("input", () => {
-  window.clearTimeout(localSearchTimer);
-  window.clearTimeout(remoteSearchTimer);
+els.searchInput.addEventListener(
+  "input",
+  () => {
+    window.clearTimeout(
+      localSearchTimer
+    );
 
-  localSearchTimer = window.setTimeout(
-    runLocalGlobalSearch,
-    160
-  );
+    window.clearTimeout(
+      remoteSearchTimer
+    );
 
-  remoteSearchTimer = window.setTimeout(
-    runRemoteGlobalSearch,
-    850
-  );
-});
+    localSearchTimer =
+      window.setTimeout(
+        runLocalGlobalSearch,
+        160
+      );
+
+    remoteSearchTimer =
+      window.setTimeout(
+        runRemoteGlobalSearch,
+        850
+      );
+  }
+);
 
 function prepareSearchView(keyword) {
-  els.pageTitle.textContent = `搜尋：${keyword}`;
-  els.breadcrumb.textContent = "搜尋";
+  els.pageTitle.textContent =
+    `搜尋：${keyword}`;
+
+  els.breadcrumb.textContent =
+    "搜尋";
+
+  closeFloatingSearch();
   showOnly(els.searchView);
 }
 
 function getLocalGlobalResults(keyword) {
-  const normalizedKeyword = normalizeSearchText(keyword);
+  const normalizedKeyword =
+    normalizeSearchText(keyword);
 
   return state.items.filter((item) => {
-    const target = normalizeSearchText(
-      `${item.category || ""} ${item.name || ""}`
-    );
+    const target =
+      normalizeSearchText(
+        `${item.category || ""} ${item.name || ""}`
+      );
 
-    return target.includes(normalizedKeyword);
+    return target.includes(
+      normalizedKeyword
+    );
   });
 }
 
 function runLocalGlobalSearch() {
-  const keyword = els.searchInput.value.trim();
+  const keyword =
+    els.searchInput.value.trim();
 
   state.pendingGlobalKeyword = keyword;
   renderMenu(keyword);
@@ -831,75 +1037,111 @@ function runLocalGlobalSearch() {
   if (!keyword) {
     state.searchRequestId++;
 
-    els.pageTitle.textContent = "工作 SOP";
-    els.breadcrumb.textContent = "首頁";
+    els.pageTitle.textContent =
+      "工作 SOP";
+
+    els.breadcrumb.textContent =
+      "首頁";
 
     renderMenu();
+    closeFloatingSearch();
     showOnly(els.homeView);
+
     return;
   }
 
   prepareSearchView(keyword);
 
-  const localResults = getLocalGlobalResults(keyword);
-  renderSearchResults(localResults, keyword);
+  const localResults =
+    getLocalGlobalResults(keyword);
+
+  renderSearchResults(
+    localResults,
+    keyword
+  );
 
   els.searchStatus.textContent =
     "已顯示名稱搜尋結果，全文搜尋中…";
 }
 
 async function runRemoteGlobalSearch() {
-  const keyword = els.searchInput.value.trim();
+  const keyword =
+    els.searchInput.value.trim();
 
   if (!keyword) return;
 
-  const requestId = ++state.searchRequestId;
-  const localResults = getLocalGlobalResults(keyword);
+  const requestId =
+    ++state.searchRequestId;
+
+  const localResults =
+    getLocalGlobalResults(keyword);
 
   try {
-    const remote = await api.search(keyword);
+    const remote =
+      await api.search(keyword);
 
     if (
-      requestId !== state.searchRequestId ||
-      els.searchInput.value.trim() !== keyword
+      requestId !==
+        state.searchRequestId ||
+      els.searchInput.value.trim() !==
+        keyword
     ) {
       return;
     }
 
-    const remoteResults = Array.isArray(remote.items)
-      ? remote.items
-      : [];
+    const remoteResults =
+      Array.isArray(remote.items)
+        ? remote.items
+        : [];
 
-    const results = mergeSearchResults(
-      localResults,
-      remoteResults
+    const results =
+      mergeSearchResults(
+        localResults,
+        remoteResults
+      );
+
+    renderSearchResults(
+      results,
+      keyword
     );
-
-    renderSearchResults(results, keyword);
 
     els.searchStatus.textContent =
       `共找到 ${results.length} 個結果`;
   } catch (error) {
-    if (requestId !== state.searchRequestId) return;
+    if (
+      requestId !==
+      state.searchRequestId
+    ) {
+      return;
+    }
 
     console.warn(
       "全文搜尋失敗，保留名稱搜尋：",
       error
     );
 
-    renderSearchResults(localResults, keyword);
+    renderSearchResults(
+      localResults,
+      keyword
+    );
 
     els.searchStatus.textContent =
       "全文搜尋暫時失敗，目前顯示名稱搜尋結果";
   }
 }
 
-function renderSearchResults(results, keyword = "") {
+function renderSearchResults(
+  results,
+  keyword = ""
+) {
   els.searchResults.innerHTML = "";
 
   if (!results.length) {
     els.searchResults.innerHTML =
-      `<p>找不到包含「${escapeHtml(keyword)}」的結果。</p>`;
+      `<p>找不到包含「${escapeHtml(
+        keyword
+      )}」的結果。</p>`;
+
     return;
   }
 
@@ -918,7 +1160,8 @@ function renderSearchResults(results, keyword = "") {
   });
 }
 
-const currentUser = getCurrentUser();
+const currentUser =
+  getCurrentUser();
 
 if (currentUser) {
   start(currentUser);
@@ -932,7 +1175,8 @@ if (currentUser) {
       );
 
       els.loginMessage.textContent =
-        error.message || "Google 登入失敗";
+        error.message ||
+        "Google 登入失敗";
     }
   );
 }
